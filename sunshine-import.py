@@ -22,6 +22,7 @@ Features:
 
 import sys
 import os
+import time
 import shutil
 import pathlib
 from pathlib import Path
@@ -33,14 +34,56 @@ from importers.steam import import_steam  # noqa: E402
 from importers.heroic import import_heroic  # noqa: E402
 from importers.launchers import import_launchers
 
-def detect_sunshine_config_dir(home: str) -> str:
-    """Detect Sunshine config directory (Flatpak + native)."""
+# Files Sunshine itself writes while running. Their mtime is what distinguishes a
+# config directory in use from one an uninstalled Flatpak left behind.
+_LIVENESS_FILES = ("sunshine.log", "sunshine_state.json", "sunshine.conf")
+
+
+def _config_dir_candidates(home: str) -> list[str]:
     flatpak_ids = ["dev.lizardbyte.app.Sunshine", "dev.lizardbyte.Sunshine"]
-    for fid in flatpak_ids:
-        fp_dir = os.path.join(home, ".var", "app", fid, "config", "sunshine")
-        if os.path.isdir(fp_dir):
-            return fp_dir
-    return os.path.join(home, ".config", "sunshine")
+    cands = [os.path.join(home, ".var", "app", fid, "config", "sunshine") for fid in flatpak_ids]
+    cands.append(os.path.join(home, ".config", "sunshine"))
+    return cands
+
+
+def _last_used(conf_dir: str) -> float:
+    """Most recent mtime among Sunshine's own runtime files, or 0.0 if none."""
+    newest = 0.0
+    for name in _LIVENESS_FILES:
+        try:
+            newest = max(newest, os.path.getmtime(os.path.join(conf_dir, name)))
+        except OSError:
+            continue
+    return newest
+
+
+def detect_sunshine_config_dir(home: str) -> str:
+    """Detect Sunshine config directory (Flatpak + native).
+
+    SUNSHINE_CONF_DIR overrides everything. Otherwise, when more than one
+    candidate exists, pick the one Sunshine used most recently rather than the
+    first that happens to exist: an uninstalled Flatpak leaves its whole config
+    tree behind, and writing to it silently does nothing.
+    """
+    override = os.getenv("SUNSHINE_CONF_DIR", "").strip()
+    if override:
+        return os.path.abspath(os.path.expanduser(os.path.expandvars(override)))
+
+    existing = [d for d in _config_dir_candidates(home) if os.path.isdir(d)]
+    if not existing:
+        return os.path.join(home, ".config", "sunshine")
+    if len(existing) == 1:
+        return existing[0]
+
+    ranked = sorted(existing, key=_last_used, reverse=True)
+    chosen = ranked[0]
+    log("Multiple Sunshine config directories found; choosing the most recently used:")
+    for d in ranked:
+        stamp = _last_used(d)
+        when = time.strftime("%Y-%m-%d %H:%M", time.localtime(stamp)) if stamp else "never used"
+        log(f"  {'->' if d == chosen else '  '} {d}  ({when})")
+    log("Set SUNSHINE_CONF_DIR (or --conf-dir) to override.")
+    return chosen
 
 
 def getenv_flag(name: str, default: bool) -> bool:
