@@ -6,9 +6,6 @@ from typing import List, Dict, Any
 from pathlib import Path
 from common.utils import log, have_cmd, yn
 
-# Absolute target folder for images (as requested)
-ABS_IMAGES_DIR = "/var/home/steam/.config/sunshine/images"
-
 # GitHub "blob" URLs -> convert to raw content automatically
 POSTERS = {
     "desktop": "https://github.com/wadiebs/bazzite-sunshine-manager/blob/main/common/posters/desktop.png",
@@ -67,7 +64,6 @@ def _steam_cmd(home: str) -> tuple[str, str]:
 def _heroic_cmd(home: str) -> tuple[str, str]:
     """Return (cmd, working_dir) for Heroic if found, else ('','')."""
     candidates = [
-        "/var/home/steam/.var/app/com.heroicgameslauncher.hgl/config/heroic",
         f"{home}/.var/app/com.heroicgameslauncher.hgl/config/heroic",
         f"{home}/.config/heroic",
     ]
@@ -86,9 +82,9 @@ def _common_fields() -> Dict[str, Any]:
         "wait-all": True,
     }
 
-def _ensure_posters() -> Dict[str, str]:
+def _ensure_posters(images_dir: str) -> Dict[str, str]:
     """
-    Ensure all required posters exist under ABS_IMAGES_DIR.
+    Ensure all required posters exist under images_dir.
     Returns dict with resolved local image paths.
     """
     paths: Dict[str, str] = {}
@@ -99,7 +95,7 @@ def _ensure_posters() -> Dict[str, str]:
             "heroic":  "Heroic.png",
             "reboot":  "Reboot.png",
         }[key]
-        dst = os.path.join(ABS_IMAGES_DIR, filename)
+        dst = os.path.join(images_dir, filename)
         if not os.path.isfile(dst):
             ok = _download_image(url, dst)
             if ok:
@@ -120,7 +116,7 @@ def import_launchers(home: str, conf_dir: str, images_dir: str, settings: Dict[s
         log("Launchers importer disabled.")
         return []
 
-    posters = _ensure_posters()
+    posters = _ensure_posters(images_dir)
     apps: List[Dict[str, Any]] = []
 
     # 1) Desktop

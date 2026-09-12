@@ -28,8 +28,20 @@ RESTART=0
 : "${IMPORT_HEROIC:=1}"
 : "${IMPORT_LAUNCHERS:=1}"
 
-# Resolve paths
-SCRIPT_DIR="/var/home/steam/.config/sunshine/helper"
+# Resolve paths from this script's own location, so the tool works for whatever
+# user is running it rather than only a user named "steam". The launcher is
+# symlinked into ~/.local/bin by common/init.sh, so resolve symlinks first.
+# Override with BSM_HELPER_DIR when testing from a checkout.
+_resolve_self_dir() {
+  local src="${BASH_SOURCE[0]}" dir
+  while [[ -L "$src" ]]; do
+    dir="$(cd -P "$(dirname "$src")" && pwd)"
+    src="$(readlink "$src")"
+    [[ "$src" != /* ]] && src="$dir/$src"
+  done
+  cd -P "$(dirname "$src")" && pwd
+}
+SCRIPT_DIR="${BSM_HELPER_DIR:-$(_resolve_self_dir)}"
 PY_SCRIPT="${SCRIPT_DIR}/sunshine-import.py"
 
 # Check requirements

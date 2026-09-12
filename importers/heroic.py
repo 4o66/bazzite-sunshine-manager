@@ -43,10 +43,8 @@ def import_heroic(home: str, conf_dir: str, images_dir: str, settings: Dict[str,
     images_dir_sideload = os.path.join(os.path.dirname(images_dir), "sideload")
     os.makedirs(images_dir_sideload, exist_ok=True)
 
-    # Heroic config root detection (prefer Steam user path used by Bazzite)
-    preferred = "/var/home/steam/.var/app/com.heroicgameslauncher.hgl/config/heroic"
+    # Heroic config root detection (Flatpak first, then native)
     fallbacks = [
-        preferred,
         f"{home}/.var/app/com.heroicgameslauncher.hgl/config/heroic",
         f"{home}/.config/heroic",
     ]
