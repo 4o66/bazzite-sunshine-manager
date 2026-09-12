@@ -166,8 +166,6 @@ class TestReconcile(unittest.TestCase):
         json.dumps({"apps": out})
 
 
-
-
 class TestPlanDocument(unittest.TestCase):
     def _doc(self, dry_run=True):
         _, plan = reconcile(FACTORY, [game()])
@@ -212,6 +210,7 @@ class TestPlanDocument(unittest.TestCase):
         self.assertEqual(by["steam"]["status"], "error")
         self.assertEqual(by["heroic"]["status"], "ok")
         self.assertEqual(by["steam"]["imported"], by["heroic"]["imported"])
+
 
 class TestDuplicatedEntries(unittest.TestCase):
     """Sunshine's web UI duplicates an app by deep-cloning it, marker included."""
