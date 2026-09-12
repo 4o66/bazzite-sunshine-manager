@@ -32,7 +32,16 @@ def import_steam(home: str, conf_dir: str, images_dir: str, settings: Dict[str, 
                 p = os.path.join(m.group(1),"steamapps")
                 if os.path.isdir(p): lib_dirs.append(p)
     lib_dirs.append(os.path.join(steam_root,"steamapps"))
-    seen=set(); lib_dirs=[d for d in lib_dirs if not (d in seen or seen.add(d))]
+    # Deduplicate by resolved path, not by string. On ostree systems (Bazzite,
+    # Silverblue) /home is a symlink to /var/home, so libraryfolders.vdf can name
+    # the same directory as steam_root by a different path and every game in it
+    # gets imported twice. Keep the first spelling seen.
+    seen=set(); deduped=[]
+    for d in lib_dirs:
+        key = os.path.realpath(d)
+        if key in seen: continue
+        seen.add(key); deduped.append(d)
+    lib_dirs = deduped
 
     # blacklist
     bl_ids=set(); bl_patterns=[]
