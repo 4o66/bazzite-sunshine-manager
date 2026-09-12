@@ -3,6 +3,7 @@ from typing import List, Dict, Any
 from common.utils import log, yn, read_json
 from common.images import steam_local_to_png, steam_cdn_to_png, steam_sgdb_to_png
 from common.image_downloader import ImageDownloader
+from common.reconcile import tag
 
 def import_steam(home: str, conf_dir: str, images_dir: str, settings: Dict[str, Any]) -> List[Dict[str, Any]]:
     IMPORT_STEAM = settings.get("IMPORT_STEAM", True)
@@ -142,7 +143,7 @@ def import_steam(home: str, conf_dir: str, images_dir: str, settings: Dict[str, 
     for game in game_metadata:
         appid = game["appid"]
         image_path = image_results.get(str(appid), "")
-        apps.append({
+        apps.append(tag({
             "name": game["name"], 
             "output": "", 
             "cmd": game["cmd"], 
@@ -151,6 +152,6 @@ def import_steam(home: str, conf_dir: str, images_dir: str, settings: Dict[str, 
             "detached": False, 
             "elevated": False, 
             "exit-on-close": True
-        })
+        }, "steam", appid))
     
     return apps
