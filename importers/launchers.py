@@ -106,16 +106,22 @@ def _ensure_posters(images_dir: str) -> Dict[str, str]:
         paths[key] = dst
     return paths
 
-def import_launchers(home: str, conf_dir: str, images_dir: str, settings: Dict[str, Any]) -> List[Dict[str, Any]]:
+def import_launchers(home: str, conf_dir: str, images_dir: str, settings: Dict[str, Any],
+                     report: Dict[str, Any] = None) -> List[Dict[str, Any]]:
     """
     Create generic launchers (Desktop, Steam-if-installed, Heroic-if-installed, Reboot).
 
     Toggle with IMPORT_LAUNCHERS (default: on).
     """
+    if report is None:
+        report = {}
     enabled = str(settings.get("IMPORT_LAUNCHERS", "1")).strip().lower() in ("1", "true", "yes", "on")
     if not enabled:
         log("Launchers importer disabled.")
+        report["status"] = "disabled"
         return []
+    # These entries are synthesised, not discovered, so the scan cannot fail.
+    report["status"] = "ok"
 
     posters = _ensure_posters(images_dir)
     apps: List[Dict[str, Any]] = []

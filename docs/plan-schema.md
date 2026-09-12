@@ -52,6 +52,10 @@ not recognise** rather than guessing.
 | `unchanged` | Ours, nothing to do. |
 | `diverged` | Ours, but you edited these fields. **Left alone.** Reclaim with `--refresh-edited <source>:<id>`. |
 | `missing` | We generated it before and no longer discover it. **Left in place.** |
+| `pruned` | Removed, because its source scanned cleanly and no longer lists it. Only with `--remove-uninstalled`. |
+| `removed_by_user` | We wrote it last run and it is gone, so you deleted it. **Not recreated**, and recorded as a tombstone. |
+| `suppressed` | In the library, but you deleted it previously, so it was not re-added. |
+| `restored` | A tombstone cleared by `--restore-removed`; the entry may be added again. |
 | `kept_foreign` | Not ours — Sunshine's defaults, or entries you created. Never touched. |
 
 Every entry except `kept_foreign` carries `source` and `id`, which together form
@@ -61,15 +65,32 @@ the `<source>:<id>` selector accepted by `--refresh-edited`.
 
 | Status | Meaning |
 |---|---|
-| `ok` | Ran to completion. |
+| `ok` | The library was found and read. |
+| `not_found` | The library or config directory does not exist here. |
 | `disabled` | Turned off by flag or environment. |
 | `error` | Raised; `error` holds the message. |
 
-**`ok` with `imported: 0` does not yet mean "nothing is installed."** An
-importer that cannot find its library logs and returns an empty list rather than
-raising, so a missing Steam install and an empty one look alike here. This is
-why removal of `missing` entries is opt-in and must never be driven by this
-field alone.
+Only `ok` proves anything about what is installed. The other three mean the scan
+never happened, which looks identical to "everything was uninstalled" — so
+entries belonging to such a source are never removed.
+
+**`ok` with `imported: 0` is still treated as suspect.** A library that is
+offline, unmounted or mid-update can scan cleanly and yield nothing. Pruning is
+refused in that case unless `--allow-empty-prune` is passed.
+
+## State kept in `meta`
+
+`apps.json`'s `meta` block carries two lists this tool maintains:
+
+- `managed` — the `<source>:<id>` of every entry written last run. Comparing it
+  against what is present is how a deletion is detected at all.
+- `removed` — tombstones for entries you deleted, so they are not recreated.
+  `--restore-removed` clears them.
+
+This lives in `apps.json` rather than a sidecar because Sunshine preserves it:
+`saveApp()` and `deleteApp()` only ever rewrite `file_tree["apps"]`. Deleting
+the `meta` block by hand is harmless — deleted entries come back once, and the
+state rebuilds from there.
 
 ## Caveat
 

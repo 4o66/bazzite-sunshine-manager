@@ -16,7 +16,8 @@ from common.image_downloader import ImageDownloader
 from common.reconcile import tag
 
 
-def import_heroic(home: str, conf_dir: str, images_dir: str, settings: Dict[str, Any]) -> List[Dict[str, Any]]:
+def import_heroic(home: str, conf_dir: str, images_dir: str, settings: Dict[str, Any],
+                  report: Dict[str, Any] = None) -> List[Dict[str, Any]]:
     """
     Discover Epic/GOG/Amazon (via Heroic) and Sideload apps and return Sunshine app entries.
 
@@ -29,11 +30,16 @@ def import_heroic(home: str, conf_dir: str, images_dir: str, settings: Dict[str,
     Returns:
         List of Sunshine app dicts.
     """
+    if report is None:
+        report = {}
+    report["status"] = "not_found"
+
     IMPORT_HEROIC = settings.get("IMPORT_HEROIC", True)
     if isinstance(IMPORT_HEROIC, str):
         IMPORT_HEROIC = IMPORT_HEROIC == "1"
     if not IMPORT_HEROIC:
         log("Heroic import disabled.")
+        report["status"] = "disabled"
         return []
 
     include_sources = [s.strip() for s in str(settings.get("INCLUDE_SOURCES", "epic,gog,amazon")).lower().split(",") if s.strip()]
@@ -53,6 +59,8 @@ def import_heroic(home: str, conf_dir: str, images_dir: str, settings: Dict[str,
     if not hero_conf_root:
         log("Heroic config root not found; skipping Heroic import.")
         return []
+    report["status"] = "ok"
+    report["root"] = hero_conf_root
 
     # Launch prefix and mode
     if "/.var/app/" in hero_conf_root:

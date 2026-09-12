@@ -183,7 +183,14 @@ class TestPlanDocument(unittest.TestCase):
     def test_totals_match_the_plan(self):
         doc = self._doc()
         for key, total in doc["totals"].items():
-            self.assertEqual(total, len(doc["plan"][key]), key)
+            self.assertEqual(total, len(doc["plan"].get(key, [])), key)
+
+    def test_a_partial_plan_still_serializes(self):
+        """A caller building a plan by hand should not crash the document."""
+        doc = plan_document({"added": []}, config_dir="/c", apps_json="/c/a.json",
+                            sources=[], dry_run=True, generator_version="2.0")
+        self.assertEqual(doc["totals"]["pruned"], 0)
+        json.dumps(doc)
 
     def test_every_plan_entry_is_addressable(self):
         """The UI needs a selector for --refresh-edited, so entries carry source and id."""

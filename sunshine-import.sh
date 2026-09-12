@@ -14,6 +14,11 @@
 #   --sgdb-key "YOUR_STEAMGRID_API" Enable SteamGrid to download game covers (IMPORT_HEROIC=1/0)
 #   --refresh-edited [SEL]         Overwrite fields you edited by hand. Bare = all;
 #                                  or a selector like steam:620 for one entry.
+#   --remove-uninstalled           Remove entries whose source no longer lists them.
+#                                  Only applies to sources that scanned cleanly.
+#   --allow-empty-prune            Also prune when a source scanned but found nothing
+#                                  (normally refused: that means a library is offline).
+#   --restore-removed [SEL]        Undo deletions so entries are recreated. Bare = all.
 #   --dry-run                      Report what would change; do not write apps.json.
 #   --json                         Emit the plan as JSON on stdout (logs stay on stderr).
 #   --restore-defaults             Put back any of Sunshine's default entries that
@@ -89,6 +94,14 @@ while (( "$#" )); do
     --restore-defaults) BSM_RESTORE_DEFAULTS=1; shift ;;
     --no-system-apps)   INCLUDE_SYSTEM_APPS=0; shift ;;
     --system-apps-json) SYSTEM_APPS_JSON="${2:-}"; shift 2 ;;
+    --remove-uninstalled) BSM_REMOVE_UNINSTALLED=1; shift ;;
+    --allow-empty-prune)  BSM_ALLOW_EMPTY_PRUNE=1; shift ;;
+    --restore-removed)
+                    if [[ -n "${2:-}" && "${2:-}" != -* ]]; then
+                      BSM_RESTORE_REMOVED="$2"; shift 2
+                    else
+                      BSM_RESTORE_REMOVED="all"; shift
+                    fi ;;
     --refresh-edited)
                     # optional selector; bare flag means everything
                     if [[ -n "${2:-}" && "${2:-}" != -* ]]; then
@@ -119,6 +132,9 @@ export BSM_REFRESH_EDITED="${BSM_REFRESH_EDITED:-}"
 export BSM_DRY_RUN="${BSM_DRY_RUN:-0}" BSM_JSON="${BSM_JSON:-0}"
 export BSM_RESTORE_DEFAULTS="${BSM_RESTORE_DEFAULTS:-0}"
 export INCLUDE_SYSTEM_APPS="${INCLUDE_SYSTEM_APPS:-1}" SYSTEM_APPS_JSON="${SYSTEM_APPS_JSON:-}"
+export BSM_REMOVE_UNINSTALLED="${BSM_REMOVE_UNINSTALLED:-0}"
+export BSM_ALLOW_EMPTY_PRUNE="${BSM_ALLOW_EMPTY_PRUNE:-0}"
+export BSM_RESTORE_REMOVED="${BSM_RESTORE_REMOVED:-}"
 
 echo "[sunshine-import] IMPORT_STEAM=$IMPORT_STEAM IMPORT_HEROIC=$IMPORT_HEROIC IMPORT_LAUNCHERS=$IMPORT_LAUNCHERS RESTART=$RESTART" >&2
 if [[ -n "${SUNSHINE_CONF_DIR:-}" ]]; then

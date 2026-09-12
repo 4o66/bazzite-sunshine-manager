@@ -124,9 +124,24 @@ def _merge(cur: Dict[str, Any], want: Dict[str, Any], ident: Identity,
     return merged, changed, diverged
 
 
+def selector(ident: Identity) -> str:
+    return f"{ident[0]}:{ident[1]}"
+
+
+def _selected(ident: Identity, selectors: Optional[Sequence[str]]) -> bool:
+    if not selectors:
+        return False
+    return "all" in selectors or selector(ident) in selectors
+
+
 def reconcile(existing: List[Dict[str, Any]], desired: List[Dict[str, Any]],
               adopt_by_name: bool = False,
-              refresh: Optional[Sequence[str]] = None) -> Tuple[List[Dict[str, Any]], Dict[str, Any]]:
+              refresh: Optional[Sequence[str]] = None,
+              previously_managed: Optional[Sequence[str]] = None,
+              tombstones: Optional[List[Dict[str, Any]]] = None,
+              prunable_sources: Optional[Sequence[str]] = None,
+              restore_removed: Optional[Sequence[str]] = None,
+              ) -> Tuple[List[Dict[str, Any]], Dict[str, Any]]:
     """Merge *desired* generated apps into the *existing* app list.
 
     Returns (apps, plan). Entries without one of our markers are passed through
@@ -136,7 +151,19 @@ def reconcile(existing: List[Dict[str, Any]], desired: List[Dict[str, Any]],
     plan: Dict[str, Any] = {
         "added": [], "updated": [], "unchanged": [],
         "diverged": [], "missing": [], "kept_foreign": [],
+        "removed_by_user": [], "suppressed": [], "pruned": [], "restored": [],
     }
+
+    was_managed = set(previously_managed or ())
+    prunable = set(prunable_sources or ())
+    graves: Dict[str, Dict[str, Any]] = {
+        f"{t.get('source')}:{t.get('id')}": dict(t)
+        for t in (tombstones or []) if isinstance(t, dict)
+    }
+    for key in list(graves):
+        src, _, gid = key.partition(":")
+        if _selected((src, gid), restore_removed):
+            plan["restored"].append(graves.pop(key))
 
     by_id: Dict[Identity, Dict[str, Any]] = {}
     for app in desired:
@@ -162,7 +189,11 @@ def reconcile(existing: List[Dict[str, Any]], desired: List[Dict[str, Any]],
             out.append(cur)
             continue
         if ident not in by_id:
-            plan["missing"].append({"name": cur.get("name"), "source": ident[0], "id": ident[1]})
+            entry = {"name": cur.get("name"), "source": ident[0], "id": ident[1]}
+            if ident[0] in prunable:
+                plan["pruned"].append(entry)
+                continue
+            plan["missing"].append(entry)
             out.append(cur)
             continue
         if ident in claimed:
@@ -189,23 +220,54 @@ def reconcile(existing: List[Dict[str, Any]], desired: List[Dict[str, Any]],
                                       "id": ident[1]})
 
     for ident, app in by_id.items():
-        if ident not in claimed:
-            out.append(dict(app))
-            plan["added"].append({"name": app.get("name"), "source": ident[0], "id": ident[1]})
+        if ident in claimed:
+            continue
+        key = selector(ident)
+        entry = {"name": app.get("name"), "source": ident[0], "id": ident[1]}
 
+        if key in graves:
+            plan["suppressed"].append(entry)
+            continue
+
+        if key in was_managed:
+            # We wrote this last run and it is no longer here, so the user
+            # deleted it. Record that rather than quietly recreating it.
+            grave = dict(entry)
+            grave["at"] = time.strftime("%Y-%m-%dT%H:%M:%S%z")
+            graves[key] = grave
+            plan["removed_by_user"].append(grave)
+            continue
+
+        out.append(dict(app))
+        plan["added"].append(entry)
+
+    plan["tombstones"] = sorted(graves.values(),
+                                key=lambda t: (str(t.get("source")), str(t.get("id"))))
+    plan["managed"] = sorted(selector(identity(a)) for a in out
+                             if isinstance(a, dict) and identity(a) is not None)
     return out, plan
 
 
 def log_plan(plan: Dict[str, Any]) -> None:
     log(f"Reconcile: {len(plan['added'])} added, {len(plan['updated'])} updated, "
         f"{len(plan['unchanged'])} unchanged, {len(plan['diverged'])} edited by you, "
-        f"{len(plan['missing'])} no longer found, {len(plan['kept_foreign'])} not ours")
+        f"{len(plan['missing'])} no longer found, {len(plan.get('pruned', []))} removed, "
+        f"{len(plan.get('suppressed', []))} suppressed, {len(plan['kept_foreign'])} not ours")
     for entry in plan["diverged"]:
         fields = ", ".join(f["field"] for f in entry["fields"])
         log(f"  kept your edits to {entry['name']!r} ({fields}); "
             f"use --refresh-edited {entry['source']}:{entry['id']} to overwrite")
     for entry in plan["missing"]:
         log(f"  {entry['name']!r} was imported before but is not installed now; left in place")
+    for entry in plan.get("pruned", []):
+        log(f"  removed {entry['name']!r}: no longer installed")
+    for entry in plan.get("removed_by_user", []):
+        log(f"  {entry['name']!r} was deleted by you and will not be recreated "
+            f"(--restore-removed {entry['source']}:{entry['id']} to undo)")
+    for entry in plan.get("suppressed", []):
+        log(f"  skipping {entry['name']!r}: you removed it previously")
+    for entry in plan.get("restored", []):
+        log(f"  restoring {entry.get('name')!r}: removal undone")
 
 
 SCHEMA_VERSION = 1
@@ -226,8 +288,9 @@ def plan_document(plan: Dict[str, Any], *, config_dir: str, apps_json: str,
         "config_dir": config_dir,
         "apps_json": apps_json,
         "sources": sources,
-        "totals": {key: len(plan[key]) for key in
-                   ("added", "updated", "unchanged", "diverged", "missing", "kept_foreign")},
+        "totals": {key: len(plan.get(key, ())) for key in
+                   ("added", "updated", "unchanged", "diverged", "missing",
+                    "kept_foreign", "removed_by_user", "suppressed", "pruned", "restored")},
         "plan": plan,
     }
 
