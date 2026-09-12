@@ -22,15 +22,19 @@ Features:
 
 import sys
 import os
+import json
 import re
 import shutil
 import pathlib
 from pathlib import Path
 from typing import Dict, Any
 
+VERSION = "2.0"
+
 # Safe to import local modules now
 from common.utils import log, read_json, write_json  # noqa: E402
-from common.reconcile import MARKER, backup, log_plan, reconcile  # noqa: E402
+from common.reconcile import (MARKER, backup, log_plan, plan_document,  # noqa: E402
+                              reconcile)
 from importers.steam import import_steam  # noqa: E402
 from importers.heroic import import_heroic  # noqa: E402
 from importers.launchers import import_launchers
@@ -53,6 +57,8 @@ def getenv_flag(name: str, default: bool) -> bool:
 
 
 def main(argv: list[str]) -> int:
+    dry_run = getenv_flag("BSM_DRY_RUN", False)
+    as_json = getenv_flag("BSM_JSON", False)
     home = str(Path.home())
     conf_dir = detect_sunshine_config_dir(home)
     os.makedirs(conf_dir, exist_ok=True)
@@ -104,18 +110,34 @@ def main(argv: list[str]) -> int:
 
     settings: Dict[str, Any] = dict(os.environ)
 
-    # Collect apps from enabled importers
-    apps = []
-    if IMPORT_STEAM:
-        apps += import_steam(home, conf_dir, images_dir_steam, settings)
-    else:
-        log("Steam importer disabled.")
-    if IMPORT_HEROIC:
-        apps += import_heroic(home, conf_dir, images_dir_heroic, settings)
-    else:
-        log("Heroic importer disabled.")
+    # Collect apps from enabled importers, recording how each one fared. A source
+    # that raised is not the same as a source that found nothing, and consumers
+    # need to tell them apart before acting on "missing" entries.
+    apps: list = []
+    sources: list = []
 
-    apps += import_launchers(home, conf_dir, os.path.join(conf_dir, "images", "launchers"), settings)
+    def run_source(name: str, enabled: bool, fn):
+        if not enabled:
+            log(f"{name.capitalize()} importer disabled.")
+            sources.append({"name": name, "enabled": False, "status": "disabled", "imported": 0})
+            return
+        try:
+            found = fn() or []
+        except Exception as e:                       # noqa: BLE001 - reported, not swallowed
+            log(f"{name.capitalize()} importer failed: {e}")
+            sources.append({"name": name, "enabled": True, "status": "error",
+                            "error": str(e), "imported": 0})
+            return
+        apps.extend(found)
+        sources.append({"name": name, "enabled": True, "status": "ok", "imported": len(found)})
+
+    run_source("steam", IMPORT_STEAM,
+               lambda: import_steam(home, conf_dir, images_dir_steam, settings))
+    run_source("heroic", IMPORT_HEROIC,
+               lambda: import_heroic(home, conf_dir, images_dir_heroic, settings))
+    run_source("launcher", True,
+               lambda: import_launchers(home, conf_dir,
+                                        os.path.join(conf_dir, "images", "launchers"), settings))
 
     # --- ENV BLOCK FIRST ---
     # Default PATH augmentation as requested; allow optional extra append via ENV_PATH_APPEND.
@@ -127,7 +149,9 @@ def main(argv: list[str]) -> int:
                                   adopt_by_name=adopt_by_name, refresh=refresh)
     log_plan(plan)
 
-    if os.path.exists(apps_json):
+    if dry_run:
+        log("Dry run: apps.json not written.")
+    elif os.path.exists(apps_json):
         try:
             log(f"Backup saved: {backup(apps_json)}")
         except Exception as e:
@@ -142,9 +166,18 @@ def main(argv: list[str]) -> int:
         "generated-by": "bazzite-sunshine-manager",
         "enabled-importers": enabled_importers,
     }
-    write_json(apps_json, out)
-    log(f"Wrote {len(merged_apps)} apps ({len(plan['kept_foreign'])} not ours, left alone). "
-        f"Enabled importers: {', '.join(enabled_importers) or 'none'}")
+    if not dry_run:
+        write_json(apps_json, out)
+        log(f"Wrote {len(merged_apps)} apps ({len(plan['kept_foreign'])} not ours, left alone). "
+            f"Enabled importers: {', '.join(enabled_importers) or 'none'}")
+
+    if as_json:
+        # Logs go to stderr, so stdout stays a clean JSON document.
+        doc = plan_document(plan, config_dir=conf_dir, apps_json=apps_json,
+                            sources=sources, dry_run=dry_run,
+                            generator_version=VERSION)
+        json.dump(doc, sys.stdout, indent=2)
+        sys.stdout.write("\n")
 
     return 0
 
