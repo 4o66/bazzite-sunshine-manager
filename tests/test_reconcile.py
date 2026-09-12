@@ -10,7 +10,13 @@ import unittest
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from common.reconcile import MARKER, field_hash, identity, reconcile, tag  # noqa: E402
+from common.reconcile import (MARKER, SCHEMA_VERSION, field_hash, identity,  # noqa: E402
+                              plan_document, reconcile, tag)
+
+
+def names(entries):
+    """Plan entries are objects; most assertions only care about the names."""
+    return [e["name"] for e in entries]
 
 FACTORY = [
     {"name": "Desktop", "image-path": "desktop.png"},
@@ -29,17 +35,17 @@ def game(appid="620", name="Portal 2", image="/img/620.png"):
 class TestReconcile(unittest.TestCase):
     def test_factory_entries_are_never_touched(self):
         out, plan = reconcile(FACTORY, [game()])
-        self.assertEqual(plan["kept_foreign"], ["Desktop", "Steam Big Picture"])
+        self.assertEqual(names(plan["kept_foreign"]), ["Desktop", "Steam Big Picture"])
         self.assertEqual(out[0], FACTORY[0])
         self.assertEqual(out[1], FACTORY[1])
-        self.assertEqual(plan["added"], ["Portal 2"])
+        self.assertEqual(names(plan["added"]), ["Portal 2"])
         self.assertEqual(len(out), 3)
 
     def test_second_run_is_idempotent(self):
         once, _ = reconcile(FACTORY, [game()])
         twice, plan = reconcile(once, [game()])
         self.assertEqual(once, twice)
-        self.assertEqual(plan["unchanged"], ["Portal 2"])
+        self.assertEqual(names(plan["unchanged"]), ["Portal 2"])
         self.assertEqual(plan["added"], [])
         self.assertEqual(plan["updated"], [])
 
@@ -89,7 +95,7 @@ class TestReconcile(unittest.TestCase):
         out2[2]["cmd"] = "steam -applaunch 620"            # user puts it back
         out3, plan = reconcile(out2, [game()])
         self.assertEqual(plan["diverged"], [])
-        self.assertEqual(plan["unchanged"], ["Portal 2"])
+        self.assertEqual(names(plan["unchanged"]), ["Portal 2"])
 
     def test_sunshine_erasing_empty_keys_is_not_an_edit(self):
         """saveApp() deletes prep-cmd/detached when empty; that must not look like a user edit."""
@@ -100,7 +106,7 @@ class TestReconcile(unittest.TestCase):
         del saved[0]["detached"]
         out2, plan = reconcile(saved, [desired])
         self.assertEqual(plan["diverged"], [])
-        self.assertEqual(plan["unchanged"], ["X"])
+        self.assertEqual(names(plan["unchanged"]), ["X"])
         self.assertEqual(plan["updated"], [])
         # absent and empty are the same state, so do not put the keys back
         self.assertNotIn("prep-cmd", out2[0])
@@ -162,3 +168,49 @@ class TestReconcile(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class TestPlanDocument(unittest.TestCase):
+    def _doc(self, dry_run=True):
+        _, plan = reconcile(FACTORY, [game()])
+        return plan_document(plan, config_dir="/c", apps_json="/c/apps.json",
+                             sources=[{"name": "steam", "enabled": True,
+                                       "status": "ok", "imported": 1}],
+                             dry_run=dry_run, generator_version="2.0")
+
+    def test_document_is_json_serializable_and_versioned(self):
+        doc = self._doc()
+        json.dumps(doc)
+        self.assertEqual(doc["schema"], SCHEMA_VERSION)
+        self.assertEqual(doc["generator"]["name"], "bazzite-sunshine-manager")
+
+    def test_totals_match_the_plan(self):
+        doc = self._doc()
+        for key, total in doc["totals"].items():
+            self.assertEqual(total, len(doc["plan"][key]), key)
+
+    def test_every_plan_entry_is_addressable(self):
+        """The UI needs a selector for --refresh-edited, so entries carry source and id."""
+        doc = self._doc()
+        for key in ("added", "updated", "unchanged", "diverged", "missing"):
+            for entry in doc["plan"][key]:
+                self.assertIn("source", entry, key)
+                self.assertIn("id", entry, key)
+
+    def test_dry_run_flag_is_recorded(self):
+        self.assertTrue(self._doc(dry_run=True)["dry_run"])
+        self.assertFalse(self._doc(dry_run=False)["dry_run"])
+
+    def test_source_status_distinguishes_error_from_empty(self):
+        doc = plan_document({"added": [], "updated": [], "unchanged": [],
+                             "diverged": [], "missing": [], "kept_foreign": []},
+                            config_dir="/c", apps_json="/c/apps.json",
+                            sources=[{"name": "steam", "enabled": True, "status": "error",
+                                      "error": "boom", "imported": 0},
+                                     {"name": "heroic", "enabled": True,
+                                      "status": "ok", "imported": 0}],
+                            dry_run=False, generator_version="2.0")
+        by = {s["name"]: s for s in doc["sources"]}
+        self.assertEqual(by["steam"]["status"], "error")
+        self.assertEqual(by["heroic"]["status"], "ok")
+        self.assertEqual(by["steam"]["imported"], by["heroic"]["imported"])

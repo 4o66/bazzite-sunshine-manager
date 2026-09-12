@@ -158,7 +158,7 @@ def reconcile(existing: List[Dict[str, Any]], desired: List[Dict[str, Any]],
             ident = name_to_id.get(cur.get("name"))
 
         if ident is None:
-            plan["kept_foreign"].append(cur.get("name"))
+            plan["kept_foreign"].append({"name": cur.get("name")})
             out.append(cur)
             continue
         if ident not in by_id:
@@ -177,14 +177,16 @@ def reconcile(existing: List[Dict[str, Any]], desired: List[Dict[str, Any]],
             plan["diverged"].append({"name": merged.get("name"), "source": ident[0],
                                      "id": ident[1], "fields": diverged})
         if changed:
-            plan["updated"].append({"name": merged.get("name"), "fields": changed})
+            plan["updated"].append({"name": merged.get("name"), "source": ident[0],
+                                    "id": ident[1], "fields": changed})
         elif not diverged:
-            plan["unchanged"].append(merged.get("name"))
+            plan["unchanged"].append({"name": merged.get("name"), "source": ident[0],
+                                      "id": ident[1]})
 
     for ident, app in by_id.items():
         if ident not in claimed:
             out.append(dict(app))
-            plan["added"].append(app.get("name"))
+            plan["added"].append({"name": app.get("name"), "source": ident[0], "id": ident[1]})
 
     return out, plan
 
@@ -199,6 +201,30 @@ def log_plan(plan: Dict[str, Any]) -> None:
             f"use --refresh-edited {entry['source']}:{entry['id']} to overwrite")
     for entry in plan["missing"]:
         log(f"  {entry['name']!r} was imported before but is not installed now; left in place")
+
+
+SCHEMA_VERSION = 1
+
+
+def plan_document(plan: Dict[str, Any], *, config_dir: str, apps_json: str,
+                  sources: List[Dict[str, Any]], dry_run: bool,
+                  generator_version: str) -> Dict[str, Any]:
+    """Serialize a reconcile *plan* as the versioned document other tools consume.
+
+    Consumers should reject a schema version they do not know rather than guess.
+    """
+    return {
+        "schema": SCHEMA_VERSION,
+        "generator": {"name": "bazzite-sunshine-manager", "version": generator_version},
+        "generated_at": time.strftime("%Y-%m-%dT%H:%M:%S%z"),
+        "dry_run": dry_run,
+        "config_dir": config_dir,
+        "apps_json": apps_json,
+        "sources": sources,
+        "totals": {key: len(plan[key]) for key in
+                   ("added", "updated", "unchanged", "diverged", "missing", "kept_foreign")},
+        "plan": plan,
+    }
 
 
 def backup(path: str, keep: int = 10) -> str:

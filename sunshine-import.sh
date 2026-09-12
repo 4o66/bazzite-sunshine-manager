@@ -14,6 +14,8 @@
 #   --sgdb-key "YOUR_STEAMGRID_API" Enable SteamGrid to download game covers (IMPORT_HEROIC=1/0)
 #   --refresh-edited [SEL]         Overwrite fields you edited by hand. Bare = all;
 #                                  or a selector like steam:620 for one entry.
+#   --dry-run                      Report what would change; do not write apps.json.
+#   --json                         Emit the plan as JSON on stdout (logs stay on stderr).
 #   -h, --help                     Show help
 #
 # Examples:
@@ -78,6 +80,8 @@ while (( "$#" )); do
     --sgdb-key)     SGDB_API_KEY="${2:-}"; shift 2 ;;
     --sgdb-enable)  SGDB_ENABLE="${2:-1}"; shift 2 ;;
     --sgdb-timeout) SGDB_TIMEOUT="${2:-12}"; shift 2 ;;
+    --dry-run)      BSM_DRY_RUN=1; shift ;;
+    --json)         BSM_JSON=1; shift ;;
     --refresh-edited)
                     # optional selector; bare flag means everything
                     if [[ -n "${2:-}" && "${2:-}" != -* ]]; then
@@ -105,6 +109,7 @@ fi
 # Environment toggles exported for the Python script
 export IMPORT_STEAM IMPORT_HEROIC IMPORT_LAUNCHERS SGDB_API_KEY SGDB_ENABLE SGDB_TIMEOUT
 export BSM_REFRESH_EDITED="${BSM_REFRESH_EDITED:-}"
+export BSM_DRY_RUN="${BSM_DRY_RUN:-0}" BSM_JSON="${BSM_JSON:-0}"
 
 echo "[sunshine-import] IMPORT_STEAM=$IMPORT_STEAM IMPORT_HEROIC=$IMPORT_HEROIC IMPORT_LAUNCHERS=$IMPORT_LAUNCHERS RESTART=$RESTART" >&2
 if [[ -n "${SUNSHINE_CONF_DIR:-}" ]]; then
