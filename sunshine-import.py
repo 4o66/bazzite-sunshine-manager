@@ -31,6 +31,8 @@ from typing import Dict, Any
 # Safe to import local modules now
 from common.utils import log, read_json, write_json  # noqa: E402
 from common.reconcile import MARKER, backup, log_plan, reconcile  # noqa: E402
+from common.system_apps import (find_system_apps_json, load_system_apps,  # noqa: E402
+                                restore_missing)
 from importers.steam import import_steam  # noqa: E402
 from importers.heroic import import_heroic  # noqa: E402
 from importers.launchers import import_launchers
@@ -91,6 +93,29 @@ def main(argv: list[str]) -> int:
     refresh = [t for t in re.split(r"[,\s]+", os.getenv("BSM_REFRESH_EDITED", "").strip()) if t]
     if refresh:
         log(f"Refreshing user-edited fields for: {', '.join(refresh)}")
+
+    # Sunshine's own defaults. Seed a fresh config from them, and put them back
+    # on request if an older version of this tool rewrote them away.
+    include_system = getenv_flag("INCLUDE_SYSTEM_APPS", True)
+    restore_defaults = getenv_flag("BSM_RESTORE_DEFAULTS", False)
+    system_apps: list = []
+    if include_system:
+        system_path = find_system_apps_json(os.getenv("SYSTEM_APPS_JSON", "").strip())
+        if system_path:
+            system_apps = load_system_apps(system_path)
+            log(f"Sunshine defaults: {len(system_apps)} entries from {system_path}")
+        else:
+            log("Sunshine defaults: shipped apps.json not found; skipping.")
+
+    if system_apps and not existing_apps:
+        existing_apps = [dict(a) for a in system_apps]
+        log(f"Fresh config: seeded with {len(existing_apps)} Sunshine default entries.")
+    elif system_apps and restore_defaults:
+        existing_apps, restored = restore_missing(existing_apps, system_apps)
+        if restored:
+            log(f"Restored Sunshine defaults: {', '.join(restored)}")
+        else:
+            log("Restore defaults: all default entries already present.")
 
     # Read toggles from environment
     IMPORT_STEAM = getenv_flag("IMPORT_STEAM", True)
