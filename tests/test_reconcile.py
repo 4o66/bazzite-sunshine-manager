@@ -162,3 +162,48 @@ class TestReconcile(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class TestDuplicatedEntries(unittest.TestCase):
+    """Sunshine's web UI duplicates an app by deep-cloning it, marker included."""
+
+    def _cloned(self):
+        g = game()
+        out, _ = reconcile([], [g])
+        clone = copy.deepcopy(out[0])
+        clone["name"] = "Portal 2 (modded)"
+        clone["cmd"] = "steam -applaunch 620 -console"
+        return g, out + [clone]
+
+    def test_a_duplicated_entry_is_never_deleted(self):
+        g, existing = self._cloned()
+        out, _ = reconcile(existing, [g])
+        self.assertIn("Portal 2 (modded)", names_of(out))
+        self.assertIn("Portal 2", names_of(out))
+
+    def test_the_copy_becomes_the_users_own_entry(self):
+        g, existing = self._cloned()
+        out, plan = reconcile(existing, [g])
+        copy_entry = [a for a in out if a["name"] == "Portal 2 (modded)"][0]
+        self.assertNotIn(MARKER, copy_entry)
+        self.assertTrue(any(e.get("adopted_copy") for e in plan["kept_foreign"]))
+
+    def test_the_copy_is_then_left_alone_forever(self):
+        g, existing = self._cloned()
+        out, _ = reconcile(existing, [g])
+        out2, plan = reconcile(out, [g])
+        self.assertEqual(out, out2)
+        self.assertEqual(len(plan["kept_foreign"]), 1)
+
+    def test_the_original_still_tracks_normally(self):
+        g, existing = self._cloned()
+        out, _ = reconcile(existing, [g])
+        out2, plan = reconcile(out, [game(image="/new.png")])
+        original = [a for a in out2 if a["name"] == "Portal 2"][0]
+        self.assertEqual(original["image-path"], "/new.png")
+        modded = [a for a in out2 if a["name"] == "Portal 2 (modded)"][0]
+        self.assertEqual(modded["cmd"], "steam -applaunch 620 -console")
+
+
+def names_of(apps):
+    return [a.get("name") for a in apps]
