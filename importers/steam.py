@@ -5,10 +5,18 @@ from common.images import steam_local_to_png, steam_cdn_to_png, steam_sgdb_to_pn
 from common.image_downloader import ImageDownloader
 from common.reconcile import tag
 
-def import_steam(home: str, conf_dir: str, images_dir: str, settings: Dict[str, Any]) -> List[Dict[str, Any]]:
+def import_steam(home: str, conf_dir: str, images_dir: str, settings: Dict[str, Any],
+                 report: Dict[str, Any] = None) -> List[Dict[str, Any]]:
+    # `report`, when given, is filled with how the scan went. "ok" means the
+    # library was found and read; anything else means its absence proves nothing
+    # about whether the user still has these games installed.
+    if report is None:
+        report = {}
+    report["status"] = "not_found"
+
     IMPORT_STEAM = settings.get("IMPORT_STEAM", True)
     if not IMPORT_STEAM:
-        log("Steam import disabled."); return []
+        log("Steam import disabled."); report["status"] = "disabled"; return []
 
     steam_root = None; steam_mode = None
     flatpak_root = f"{home}/.var/app/com.valvesoftware.Steam/.local/share/Steam"
@@ -20,6 +28,8 @@ def import_steam(home: str, conf_dir: str, images_dir: str, settings: Dict[str, 
 
     if not steam_root or not os.path.isdir(os.path.join(steam_root, "steamapps")):
         log("Steam not found; skipping Steam import."); return []
+    report["status"] = "ok"
+    report["root"] = steam_root
 
     log(f"Steam: {steam_mode} at {steam_root}")
 
@@ -105,6 +115,8 @@ def import_steam(home: str, conf_dir: str, images_dir: str, settings: Dict[str, 
             log(f"Found Steam  [{appid}] {yn(name)}")
     
     log(f"Steam installed scanned: {app_count}")
+    report["scanned"] = app_count
+    report["libraries"] = list(lib_dirs)
     
     # Second pass: download all images concurrently
     timeout = int(settings.get("SGDB_TIMEOUT", 6))  # Reduced default timeout
