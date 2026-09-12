@@ -165,9 +165,14 @@ def reconcile(existing: List[Dict[str, Any]], desired: List[Dict[str, Any]],
             plan["missing"].append({"name": cur.get("name"), "source": ident[0], "id": ident[1]})
             out.append(cur)
             continue
-        if ident in claimed:            # duplicate marker; keep the first only
-            plan["missing"].append({"name": cur.get("name"), "source": ident[0],
-                                    "id": ident[1], "duplicate": True})
+        if ident in claimed:
+            # A second entry claiming the same id is what Sunshine's web UI
+            # produces when you duplicate an app: it deep-clones the marker too.
+            # That copy is the user's, so hand it over rather than deleting it --
+            # dropping an entry someone deliberately made is never the right call.
+            adopted = {k: v for k, v in cur.items() if k != MARKER}
+            out.append(adopted)
+            plan["kept_foreign"].append({"name": adopted.get("name"), "adopted_copy": True})
             continue
 
         claimed.add(ident)
