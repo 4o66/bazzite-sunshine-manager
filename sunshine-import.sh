@@ -16,6 +16,10 @@
 #                                  or a selector like steam:620 for one entry.
 #   --dry-run                      Report what would change; do not write apps.json.
 #   --json                         Emit the plan as JSON on stdout (logs stay on stderr).
+#   --restore-defaults             Put back any of Sunshine's default entries that
+#                                  are missing (never overwrites ones you kept).
+#   --no-system-apps               Do not seed or restore Sunshine's defaults.
+#   --system-apps-json FILE        Use FILE as the source of those defaults.
 #   -h, --help                     Show help
 #
 # Examples:
@@ -82,6 +86,9 @@ while (( "$#" )); do
     --sgdb-timeout) SGDB_TIMEOUT="${2:-12}"; shift 2 ;;
     --dry-run)      BSM_DRY_RUN=1; shift ;;
     --json)         BSM_JSON=1; shift ;;
+    --restore-defaults) BSM_RESTORE_DEFAULTS=1; shift ;;
+    --no-system-apps)   INCLUDE_SYSTEM_APPS=0; shift ;;
+    --system-apps-json) SYSTEM_APPS_JSON="${2:-}"; shift 2 ;;
     --refresh-edited)
                     # optional selector; bare flag means everything
                     if [[ -n "${2:-}" && "${2:-}" != -* ]]; then
@@ -110,6 +117,8 @@ fi
 export IMPORT_STEAM IMPORT_HEROIC IMPORT_LAUNCHERS SGDB_API_KEY SGDB_ENABLE SGDB_TIMEOUT
 export BSM_REFRESH_EDITED="${BSM_REFRESH_EDITED:-}"
 export BSM_DRY_RUN="${BSM_DRY_RUN:-0}" BSM_JSON="${BSM_JSON:-0}"
+export BSM_RESTORE_DEFAULTS="${BSM_RESTORE_DEFAULTS:-0}"
+export INCLUDE_SYSTEM_APPS="${INCLUDE_SYSTEM_APPS:-1}" SYSTEM_APPS_JSON="${SYSTEM_APPS_JSON:-}"
 
 echo "[sunshine-import] IMPORT_STEAM=$IMPORT_STEAM IMPORT_HEROIC=$IMPORT_HEROIC IMPORT_LAUNCHERS=$IMPORT_LAUNCHERS RESTART=$RESTART" >&2
 if [[ -n "${SUNSHINE_CONF_DIR:-}" ]]; then
