@@ -5,6 +5,7 @@ import urllib.request
 from typing import List, Dict, Any
 from pathlib import Path
 from common.utils import log, have_cmd, yn
+from common.reconcile import tag
 
 # Absolute target folder for images (as requested)
 ABS_IMAGES_DIR = "/var/home/steam/.config/sunshine/images"
@@ -124,7 +125,7 @@ def import_launchers(home: str, conf_dir: str, images_dir: str, settings: Dict[s
     apps: List[Dict[str, Any]] = []
 
     # 1) Desktop
-    apps.append({
+    apps.append(tag({
         "name": NAMES["desktop"],
         "cmd": "",
         "working-dir": home,
@@ -133,13 +134,13 @@ def import_launchers(home: str, conf_dir: str, images_dir: str, settings: Dict[s
         "elevated": False,
         "exit-on-close": True,
         **_common_fields(),
-    })
+    }, "launcher", "desktop"))
     log(f"Added {yn(NAMES['desktop'])} launcher")
 
     # 2) Steam (only if installed)
     steam_cmd, steam_wd = _steam_cmd(home)
     if steam_cmd:
-        apps.append({
+        apps.append(tag({
             "name": NAMES["steam"],
             "cmd": steam_cmd,
             "working-dir": steam_wd or home,
@@ -148,7 +149,7 @@ def import_launchers(home: str, conf_dir: str, images_dir: str, settings: Dict[s
             "elevated": False,
             "exit-on-close": True,
             **_common_fields(),
-        })
+        }, "launcher", "steam"))
         log(f"Added {yn(NAMES['steam'])} launcher")
     else:
         log("Steam not detected; skipping Steam launcher")
@@ -156,7 +157,7 @@ def import_launchers(home: str, conf_dir: str, images_dir: str, settings: Dict[s
     # 3) Heroic (only if installed)
     heroic_cmd, heroic_wd = _heroic_cmd(home)
     if heroic_cmd:
-        apps.append({
+        apps.append(tag({
             "name": NAMES["heroic"],
             "cmd": heroic_cmd,
             "working-dir": heroic_wd or home,
@@ -165,20 +166,20 @@ def import_launchers(home: str, conf_dir: str, images_dir: str, settings: Dict[s
             "elevated": False,
             "exit-on-close": True,
             **_common_fields(),
-        })
+        }, "launcher", "heroic"))
         log(f"Added {yn(NAMES['heroic'])} launcher")
     else:
         log("Heroic not detected; skipping Heroic launcher")
 
     # 4) Reboot
-    apps.append({
+    apps.append(tag({
         "name": NAMES["reboot"],
         "auto-detach": True,
         "cmd": [],
         "detached": ["systemctl reboot"],
         "image-path": posters["reboot"],
         **_common_fields(),
-    })
+    }, "launcher", "reboot"))
     log(f"Added {yn(NAMES['reboot'])} launcher")
 
     return apps

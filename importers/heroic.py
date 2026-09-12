@@ -13,6 +13,7 @@ from typing import List, Dict, Any
 from common.utils import log, read_json, slugify, yn
 from common.images import download_temp, stretch_png_600x900, sgdb_search_by_name
 from common.image_downloader import ImageDownloader
+from common.reconcile import tag
 
 
 def import_heroic(home: str, conf_dir: str, images_dir: str, settings: Dict[str, Any]) -> List[Dict[str, Any]]:
@@ -856,10 +857,12 @@ def import_heroic(home: str, conf_dir: str, images_dir: str, settings: Dict[str,
             if image_path:
                 game["image-path"] = image_path
     
-    # Clean up temporary fields
+    # Replace the scratch fields with an ownership marker
+    tagged: List[Dict[str, Any]] = []
     for app in heroic_apps:
-        app.pop("_gid", None)
+        gid = app.pop("_gid", "")
+        src = app.pop("_src", "heroic")
         app.pop("_title", None)
-        app.pop("_src", None)
+        tagged.append(tag(app, str(src).lower(), gid))
 
-    return heroic_apps
+    return tagged

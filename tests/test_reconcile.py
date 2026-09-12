@@ -1,0 +1,164 @@
+"""Tests for the apps.json reconcile logic. Standard library only:
+
+    python3 -m unittest discover -s tests -v
+"""
+import copy
+import json
+import os
+import sys
+import unittest
+
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
+from common.reconcile import MARKER, field_hash, identity, reconcile, tag  # noqa: E402
+
+FACTORY = [
+    {"name": "Desktop", "image-path": "desktop.png"},
+    {"name": "Steam Big Picture", "detached": ["setsid steam steam://open/bigpicture"],
+     "image-path": "steam.png"},
+]
+
+
+def game(appid="620", name="Portal 2", image="/img/620.png"):
+    return tag({"name": name, "output": "", "cmd": f"steam -applaunch {appid}",
+                "working-dir": "/home/u/.local/share/Steam",
+                "image-path": image, "detached": False, "elevated": False,
+                "exit-on-close": True}, "steam", appid)
+
+
+class TestReconcile(unittest.TestCase):
+    def test_factory_entries_are_never_touched(self):
+        out, plan = reconcile(FACTORY, [game()])
+        self.assertEqual(plan["kept_foreign"], ["Desktop", "Steam Big Picture"])
+        self.assertEqual(out[0], FACTORY[0])
+        self.assertEqual(out[1], FACTORY[1])
+        self.assertEqual(plan["added"], ["Portal 2"])
+        self.assertEqual(len(out), 3)
+
+    def test_second_run_is_idempotent(self):
+        once, _ = reconcile(FACTORY, [game()])
+        twice, plan = reconcile(once, [game()])
+        self.assertEqual(once, twice)
+        self.assertEqual(plan["unchanged"], ["Portal 2"])
+        self.assertEqual(plan["added"], [])
+        self.assertEqual(plan["updated"], [])
+
+    def test_user_edit_is_kept_and_flagged(self):
+        out, _ = reconcile(FACTORY, [game()])
+        out[2]["cmd"] = "gamemoderun steam -applaunch 620"     # user edits in the web UI
+        out2, plan = reconcile(out, [game()])
+        self.assertEqual(out2[2]["cmd"], "gamemoderun steam -applaunch 620")
+        self.assertEqual(len(plan["diverged"]), 1)
+        self.assertEqual(plan["diverged"][0]["fields"][0]["field"], "cmd")
+
+    def test_divergence_is_reported_every_run_not_just_once(self):
+        out, _ = reconcile(FACTORY, [game()])
+        out[2]["cmd"] = "custom"
+        out2, _ = reconcile(out, [game()])
+        out3, plan = reconcile(out2, [game()])
+        self.assertEqual(out3[2]["cmd"], "custom")
+        self.assertEqual(len(plan["diverged"]), 1)
+
+    def test_untouched_fields_still_refresh_beside_an_edited_one(self):
+        out, _ = reconcile(FACTORY, [game()])
+        out[2]["cmd"] = "custom"
+        out2, plan = reconcile(out, [game(image="/img/620-new.png")])
+        self.assertEqual(out2[2]["cmd"], "custom")              # yours, kept
+        self.assertEqual(out2[2]["image-path"], "/img/620-new.png")  # ours, refreshed
+        self.assertIn("image-path", plan["updated"][0]["fields"])
+
+    def test_refresh_edited_reclaims_the_field(self):
+        out, _ = reconcile(FACTORY, [game()])
+        out[2]["cmd"] = "custom"
+        out2, plan = reconcile(out, [game()], refresh=["steam:620"])
+        self.assertEqual(out2[2]["cmd"], "steam -applaunch 620")
+        self.assertEqual(plan["diverged"], [])
+
+    def test_refresh_selector_does_not_affect_other_entries(self):
+        out, _ = reconcile(FACTORY, [game(), game("440", "TF2")])
+        out[2]["cmd"] = "custom-620"
+        out[3]["cmd"] = "custom-440"
+        out2, _ = reconcile(out, [game(), game("440", "TF2")], refresh=["steam:620"])
+        self.assertEqual(out2[2]["cmd"], "steam -applaunch 620")   # reclaimed
+        self.assertEqual(out2[3]["cmd"], "custom-440")             # untouched
+
+    def test_user_converging_on_our_value_clears_divergence(self):
+        out, _ = reconcile(FACTORY, [game()])
+        out[2]["cmd"] = "steam -applaunch 999"
+        out2, _ = reconcile(out, [game()])                 # diverged
+        out2[2]["cmd"] = "steam -applaunch 620"            # user puts it back
+        out3, plan = reconcile(out2, [game()])
+        self.assertEqual(plan["diverged"], [])
+        self.assertEqual(plan["unchanged"], ["Portal 2"])
+
+    def test_sunshine_erasing_empty_keys_is_not_an_edit(self):
+        """saveApp() deletes prep-cmd/detached when empty; that must not look like a user edit."""
+        desired = tag({"name": "X", "cmd": "x", "prep-cmd": [], "detached": []}, "launcher", "x")
+        out, _ = reconcile([], [desired])
+        saved = copy.deepcopy(out)
+        del saved[0]["prep-cmd"]        # exactly what Sunshine does on save
+        del saved[0]["detached"]
+        out2, plan = reconcile(saved, [desired])
+        self.assertEqual(plan["diverged"], [])
+        self.assertEqual(plan["unchanged"], ["X"])
+        self.assertEqual(plan["updated"], [])
+        # absent and empty are the same state, so do not put the keys back
+        self.assertNotIn("prep-cmd", out2[0])
+
+    def test_reconcile_does_not_mutate_its_inputs(self):
+        desired = [game()]
+        snapshot = copy.deepcopy(desired)
+        out, _ = reconcile(list(FACTORY), desired)
+        out[-1]["cmd"] = "mutated"
+        out[-1]["name"] = "mutated"
+        self.assertEqual(desired, snapshot)
+
+    def test_uninstalled_entry_is_kept_and_reported(self):
+        out, _ = reconcile(FACTORY, [game(), game("440", "TF2")])
+        out2, plan = reconcile(out, [game()])            # TF2 uninstalled
+        self.assertEqual([a.get("name") for a in out2].count("TF2"), 1)
+        self.assertEqual(len(plan["missing"]), 1)
+        self.assertEqual(plan["missing"][0]["name"], "TF2")
+
+    def test_user_added_keys_on_our_entry_survive(self):
+        out, _ = reconcile(FACTORY, [game()])
+        out[2]["prep-cmd"] = [{"do": "x", "undo": "y"}]   # user adds a field we do not manage
+        out2, _ = reconcile(out, [game()])
+        self.assertEqual(out2[2]["prep-cmd"], [{"do": "x", "undo": "y"}])
+
+    def test_adopt_by_name_migrates_a_pre_marker_file(self):
+        legacy = [{"name": "Portal 2", "cmd": "steam -applaunch 620", "image-path": "/old.png"}]
+        out, plan = reconcile(legacy, [game()], adopt_by_name=True)
+        self.assertEqual(len(out), 1)                     # adopted, not duplicated
+        self.assertEqual(identity(out[0]), ("steam", "620"))
+        self.assertEqual(out[0]["image-path"], "/img/620.png")
+
+    def test_without_adopt_a_pre_marker_file_would_duplicate(self):
+        legacy = [{"name": "Portal 2", "cmd": "steam -applaunch 620"}]
+        out, _ = reconcile(legacy, [game()], adopt_by_name=False)
+        self.assertEqual(len(out), 2)                     # why the migration flag exists
+
+    def test_desired_app_without_marker_is_rejected(self):
+        with self.assertRaises(ValueError):
+            reconcile([], [{"name": "untagged"}])
+
+    def test_marker_records_only_fields_we_manage(self):
+        g = game()
+        self.assertEqual(set(g[MARKER]["fields"]), set(k for k in g if k != MARKER))
+
+    def test_hash_is_over_values_not_serialized_text(self):
+        """Sunshine re-dumps with sorted keys; key order must not register as a change."""
+        self.assertEqual(field_hash("prep-cmd", [{"do": "a", "undo": "b"}]),
+                         field_hash("prep-cmd", [{"undo": "b", "do": "a"}]))
+
+    def test_absent_and_empty_hash_identically(self):
+        self.assertEqual(field_hash("detached", None), field_hash("detached", []))
+        self.assertNotEqual(field_hash("cmd", None), field_hash("cmd", ""))
+
+    def test_output_is_json_serializable(self):
+        out, _ = reconcile(FACTORY, [game()])
+        json.dumps({"apps": out})
+
+
+if __name__ == "__main__":
+    unittest.main()
