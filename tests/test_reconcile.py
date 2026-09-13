@@ -266,3 +266,18 @@ def names_of(apps):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class TestTombstoneArtwork(unittest.TestCase):
+    """A hidden entry should still be showable as itself, not a blank tile."""
+
+    def test_a_tombstone_keeps_the_artwork(self):
+        g = tag({"name": "Portal 2", "cmd": "x", "image-path": "/img/620.png"},
+                "steam", "620")
+        _, plan = reconcile([], [g], previously_managed=["steam:620"])
+        self.assertEqual(plan["tombstones"][0]["image-path"], "/img/620.png")
+
+    def test_a_tombstone_without_artwork_omits_the_key(self):
+        g = tag({"name": "X", "cmd": "x", "image-path": ""}, "launcher", "x")
+        _, plan = reconcile([], [g], previously_managed=["launcher:x"])
+        self.assertNotIn("image-path", plan["tombstones"][0])

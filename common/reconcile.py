@@ -234,6 +234,10 @@ def reconcile(existing: List[Dict[str, Any]], desired: List[Dict[str, Any]],
             # deleted it. Record that rather than quietly recreating it.
             grave = dict(entry)
             grave["at"] = time.strftime("%Y-%m-%dT%H:%M:%S%z")
+            # Keep the artwork so a hidden entry can still be shown as one,
+            # rather than as a blank tile with a name under it.
+            if app.get("image-path"):
+                grave["image-path"] = app["image-path"]
             graves[key] = grave
             plan["removed_by_user"].append(grave)
             continue

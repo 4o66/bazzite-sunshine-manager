@@ -34,12 +34,10 @@ VERSION = "2.0"
 
 # Safe to import local modules now
 from common.utils import log, read_json, write_json  # noqa: E402
-from common.reconcile import (MARKER, backup, log_plan, plan_document,  # noqa: E402
-                              reconcile)
-from common.reconcile import MARKER, backup, log_plan, reconcile  # noqa: E402
+from common.reconcile import (MARKER, SCHEMA_VERSION, backup, log_plan,  # noqa: E402
+                              plan_document, reconcile)
 from common.system_apps import (find_system_apps_json, load_system_apps,  # noqa: E402
                                 restore_missing)
-from common.utils import log, write_json  # noqa: E402
 from common.sunshine_api import (SunshineAPIError, reload_sunshine,  # noqa: E402
                                  save_credentials, verify_credentials)
 from importers.steam import import_steam  # noqa: E402
@@ -118,6 +116,52 @@ def _auth_result(ok: bool, message: str, as_json: bool) -> int:
     return 0 if ok else 1
 
 
+def dump_state(conf_dir: str, as_json: bool) -> int:
+    """Emit what is in apps.json right now, for a front end to render.
+
+    Distinct from the plan: the plan says what *would* change, this says what
+    *is*. A manager needs both, and reading apps.json in two places would mean
+    two implementations of the marker and tombstone conventions.
+    """
+    apps_json = os.path.join(conf_dir, "apps.json")
+    payload = read_json(apps_json, {})
+    if not isinstance(payload, dict):
+        payload = {"apps": payload if isinstance(payload, list) else []}
+    apps = payload.get("apps")
+    apps = apps if isinstance(apps, list) else []
+    meta = payload.get("meta") if isinstance(payload.get("meta"), dict) else {}
+
+    entries = []
+    for index, app in enumerate(apps):
+        if not isinstance(app, dict):
+            continue
+        marker = app.get(MARKER) if isinstance(app.get(MARKER), dict) else None
+        entries.append({
+            "index": index,
+            "name": app.get("name"),
+            "image-path": app.get("image-path") or "",
+            "cmd": app.get("cmd") or "",
+            "source": marker.get("source") if marker else None,
+            "id": marker.get("id") if marker else None,
+            "managed": marker is not None,
+        })
+
+    doc = {
+        "schema": SCHEMA_VERSION,
+        "generator": {"name": "bazzite-sunshine-manager", "version": VERSION},
+        "config_dir": conf_dir,
+        "apps_json": apps_json,
+        "apps": entries,
+        "hidden": [t for t in (meta.get("removed") or []) if isinstance(t, dict)],
+    }
+    if as_json:
+        json.dump(doc, sys.stdout, indent=2)
+        sys.stdout.write("\n")
+    else:
+        log(f"{len(entries)} apps, {len(doc['hidden'])} hidden")
+    return 0
+
+
 def check_auth(conf_dir: str, as_json: bool) -> int:
     """Are stored credentials present and accepted by Sunshine?"""
     try:
@@ -153,6 +197,8 @@ def main(argv: list[str]) -> int:
     os.makedirs(conf_dir, exist_ok=True)
 
     # Credential modes exit before any scanning or writing happens.
+    if getenv_flag("BSM_STATE", False):
+        return dump_state(conf_dir, as_json)
     if getenv_flag("BSM_CHECK_AUTH", False):
         return check_auth(conf_dir, as_json)
     if getenv_flag("BSM_SAVE_AUTH", False):
