@@ -9,6 +9,10 @@
 #   --heroic / --no-heroic         Enable/disable Heroic importer (IMPORT_HEROIC=1/0)
 #   --launchers / --no-launchers   Enable/disable Launchers importer (IMPORT_LAUNCHERS=1/0)
 #   --restart                      Restart Sunshine after import (systemctl --user restart sunshine.service)
+#   --reload                       Ask Sunshine to re-read apps.json via its own API,
+#                                  without restarting. Keeps any stream alive.
+#                                  Needs SUNSHINE_USERNAME/SUNSHINE_PASSWORD or a
+#                                  mode-600 .bsm-credentials in the config dir.
 #   --python PY                    Python interpreter to use (default: python3)
 #   --conf-dir DIR                 Force Sunshine config dir (sets SUNSHINE_CONF_DIR for your script to read)
 #   --sgdb-key "YOUR_STEAMGRID_API" Enable SteamGrid to download game covers (IMPORT_HEROIC=1/0)
@@ -84,6 +88,7 @@ while (( "$#" )); do
     --launchers)    IMPORT_LAUNCHERS=1; shift ;;
     --no-launchers) IMPORT_LAUNCHERS=0; shift ;;
     --restart)      RESTART=1; shift ;;
+    --reload)       BSM_RELOAD=1; shift ;;
     --python)       PYTHON="${2:-}"; shift 2 ;;
     --conf-dir)     export SUNSHINE_CONF_DIR="${2:-}"; shift 2 ;;
     --sgdb-key)     SGDB_API_KEY="${2:-}"; shift 2 ;;
@@ -135,6 +140,7 @@ export INCLUDE_SYSTEM_APPS="${INCLUDE_SYSTEM_APPS:-1}" SYSTEM_APPS_JSON="${SYSTE
 export BSM_REMOVE_UNINSTALLED="${BSM_REMOVE_UNINSTALLED:-0}"
 export BSM_ALLOW_EMPTY_PRUNE="${BSM_ALLOW_EMPTY_PRUNE:-0}"
 export BSM_RESTORE_REMOVED="${BSM_RESTORE_REMOVED:-}"
+export BSM_RELOAD="${BSM_RELOAD:-0}"
 
 echo "[sunshine-import] IMPORT_STEAM=$IMPORT_STEAM IMPORT_HEROIC=$IMPORT_HEROIC IMPORT_LAUNCHERS=$IMPORT_LAUNCHERS RESTART=$RESTART" >&2
 if [[ -n "${SUNSHINE_CONF_DIR:-}" ]]; then

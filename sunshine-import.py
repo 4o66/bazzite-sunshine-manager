@@ -39,6 +39,8 @@ from common.reconcile import (MARKER, backup, log_plan, plan_document,  # noqa: 
 from common.reconcile import MARKER, backup, log_plan, reconcile  # noqa: E402
 from common.system_apps import (find_system_apps_json, load_system_apps,  # noqa: E402
                                 restore_missing)
+from common.utils import log, write_json  # noqa: E402
+from common.sunshine_api import reload_sunshine  # noqa: E402
 from importers.steam import import_steam  # noqa: E402
 from importers.heroic import import_heroic  # noqa: E402
 from importers.launchers import import_launchers
@@ -288,6 +290,12 @@ def main(argv: list[str]) -> int:
                             generator_version=VERSION)
         json.dump(doc, sys.stdout, indent=2)
         sys.stdout.write("\n")
+
+    # Sunshine has no file watcher, so the file we just wrote is invisible to it
+    # until it re-reads. Ask it to, rather than restarting and dropping whatever
+    # stream is in progress.
+    if getenv_flag("BSM_RELOAD", False):
+        reload_sunshine(conf_dir)
 
     return 0
 
