@@ -9,6 +9,8 @@
 #   --heroic / --no-heroic         Enable/disable Heroic importer (IMPORT_HEROIC=1/0)
 #   --launchers / --no-launchers   Enable/disable Launchers importer (IMPORT_LAUNCHERS=1/0)
 #   --restart                      Restart Sunshine after import (systemctl --user restart sunshine.service)
+#   --mutate                       Apply manual changes read as JSON on stdin
+#                                  ({"ops":[...]}). Combine with --reload.
 #   --state                        Report what is in apps.json now (not what would
 #                                  change) and exit. Use with --json.
 #   --check-auth                   Test the stored Sunshine credentials and exit.
@@ -96,6 +98,7 @@ while (( "$#" )); do
     --restart)      RESTART=1; shift ;;
     --reload)       BSM_RELOAD=1; shift ;;
     --state)        BSM_STATE=1; shift ;;
+    --mutate)       BSM_MUTATE=1; shift ;;
     --check-auth)   BSM_CHECK_AUTH=1; shift ;;
     --save-auth)    BSM_SAVE_AUTH=1; shift ;;
     --python)       PYTHON="${2:-}"; shift 2 ;;
@@ -151,7 +154,7 @@ export BSM_ALLOW_EMPTY_PRUNE="${BSM_ALLOW_EMPTY_PRUNE:-0}"
 export BSM_RESTORE_REMOVED="${BSM_RESTORE_REMOVED:-}"
 export BSM_RELOAD="${BSM_RELOAD:-0}"
 export BSM_CHECK_AUTH="${BSM_CHECK_AUTH:-0}" BSM_SAVE_AUTH="${BSM_SAVE_AUTH:-0}"
-export BSM_STATE="${BSM_STATE:-0}"
+export BSM_STATE="${BSM_STATE:-0}" BSM_MUTATE="${BSM_MUTATE:-0}"
 
 echo "[sunshine-import] IMPORT_STEAM=$IMPORT_STEAM IMPORT_HEROIC=$IMPORT_HEROIC IMPORT_LAUNCHERS=$IMPORT_LAUNCHERS RESTART=$RESTART" >&2
 if [[ -n "${SUNSHINE_CONF_DIR:-}" ]]; then

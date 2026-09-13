@@ -38,6 +38,7 @@ from common.reconcile import (MARKER, SCHEMA_VERSION, backup, log_plan,  # noqa:
                               plan_document, reconcile)
 from common.system_apps import (find_system_apps_json, load_system_apps,  # noqa: E402
                                 restore_missing)
+from common.mutate import apply_ops  # noqa: E402
 from common.sunshine_api import (SunshineAPIError, reload_sunshine,  # noqa: E402
                                  save_credentials, verify_credentials)
 from importers.steam import import_steam  # noqa: E402
@@ -114,6 +115,46 @@ def _auth_result(ok: bool, message: str, as_json: bool) -> int:
         sys.stdout.write("\n")
     log(message)
     return 0 if ok else 1
+
+
+def mutate(conf_dir: str, as_json: bool) -> int:
+    """Apply queued manual changes, read as JSON on stdin.
+
+    Writing apps.json from the front end instead would duplicate the marker,
+    managed-list and tombstone rules that live beside the reconciler.
+    """
+    apps_json = os.path.join(conf_dir, "apps.json")
+    try:
+        request = json.loads(sys.stdin.read() or "{}")
+    except json.JSONDecodeError as e:
+        return _auth_result(False, f"Could not read the operations: {e}", as_json)
+    ops = request.get("ops") if isinstance(request, dict) else None
+    if not isinstance(ops, list) or not ops:
+        return _auth_result(False, "No operations given", as_json)
+
+    payload = read_json(apps_json, {})
+    if not isinstance(payload, dict):
+        payload = {"apps": payload if isinstance(payload, list) else []}
+
+    updated, results = apply_ops(payload, ops)
+    failed = [r for r in results if not r.get("ok")]
+
+    if os.path.exists(apps_json):
+        try:
+            log(f"Backup saved: {backup(apps_json)}")
+        except Exception as e:
+            log(f"Warning: failed to backup apps.json: {e}")
+    write_json(apps_json, updated)
+
+    applied = len(results) - len(failed)
+    log(f"Applied {applied} of {len(results)} change(s) to {apps_json}")
+    if as_json:
+        json.dump({"ok": not failed, "applied": applied, "results": results},
+                  sys.stdout, indent=2)
+        sys.stdout.write("\n")
+    if getenv_flag("BSM_RELOAD", False):
+        reload_sunshine(conf_dir)
+    return 0 if not failed else 1
 
 
 def dump_state(conf_dir: str, as_json: bool) -> int:
@@ -197,6 +238,8 @@ def main(argv: list[str]) -> int:
     os.makedirs(conf_dir, exist_ok=True)
 
     # Credential modes exit before any scanning or writing happens.
+    if getenv_flag("BSM_MUTATE", False):
+        return mutate(conf_dir, as_json)
     if getenv_flag("BSM_STATE", False):
         return dump_state(conf_dir, as_json)
     if getenv_flag("BSM_CHECK_AUTH", False):

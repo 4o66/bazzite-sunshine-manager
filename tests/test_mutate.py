@@ -1,0 +1,176 @@
+"""Tests for manual changes applied to apps.json."""
+import os
+import sys
+import unittest
+
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
+from common.mutate import MutateError, apply_ops  # noqa: E402
+from common.reconcile import MARKER, tag  # noqa: E402
+
+
+def payload():
+    managed = tag({"name": "Portal 2", "cmd": "steam -applaunch 620",
+                   "image-path": "/img/620.png"}, "steam", "620")
+    return {
+        "env": {"PATH": "x"},
+        "apps": [{"name": "Desktop", "image-path": "desktop.png"}, managed],
+        "meta": {"generated-by": "bazzite-sunshine-manager",
+                 "managed": ["steam:620"], "removed": []},
+    }
+
+
+def names(p):
+    return [a["name"] for a in p["apps"]]
+
+
+class TestEdit(unittest.TestCase):
+    def test_a_field_is_changed(self):
+        out, res = apply_ops(payload(), [{"op": "edit", "index": 1, "name": "Portal 2",
+                                          "fields": {"cmd": "custom"}}])
+        self.assertTrue(res[0]["ok"])
+        self.assertEqual(out["apps"][1]["cmd"], "custom")
+
+    def test_unknown_fields_are_ignored_not_written_through(self):
+        out, _ = apply_ops(payload(), [{"op": "edit", "index": 1, "name": "Portal 2",
+                                        "fields": {"name": "P2", "evil": "x"}}])
+        self.assertEqual(out["apps"][1]["name"], "P2")
+        self.assertNotIn("evil", out["apps"][1])
+
+    def test_editing_leaves_the_marker_alone_so_divergence_is_detected(self):
+        out, _ = apply_ops(payload(), [{"op": "edit", "index": 1, "name": "Portal 2",
+                                        "fields": {"cmd": "custom"}}])
+        self.assertIn(MARKER, out["apps"][1])
+
+    def test_a_moved_entry_is_found_by_name(self):
+        p = payload()
+        p["apps"].insert(0, {"name": "New First"})
+        out, res = apply_ops(p, [{"op": "edit", "index": 1, "name": "Portal 2",
+                                  "fields": {"cmd": "custom"}}])
+        self.assertTrue(res[0]["ok"])
+        self.assertEqual([a for a in out["apps"] if a["name"] == "Portal 2"][0]["cmd"],
+                         "custom")
+
+    def test_a_vanished_entry_is_refused_rather_than_guessed(self):
+        p = payload()
+        p["apps"] = [p["apps"][0]]
+        _, res = apply_ops(p, [{"op": "edit", "index": 1, "name": "Portal 2",
+                                "fields": {"cmd": "x"}}])
+        self.assertFalse(res[0]["ok"])
+        self.assertIn("no longer where it was", res[0]["error"])
+
+    def test_an_ambiguous_name_is_refused(self):
+        p = payload()
+        p["apps"].append({"name": "Portal 2"})
+        p["apps"].insert(0, {"name": "shifted"})
+        _, res = apply_ops(p, [{"op": "edit", "index": 9, "name": "Portal 2",
+                                "fields": {"cmd": "x"}}])
+        self.assertFalse(res[0]["ok"])
+        self.assertIn("more than one", res[0]["error"])
+
+
+class TestClone(unittest.TestCase):
+    def test_the_copy_is_unmarked_so_the_importer_never_claims_it(self):
+        out, _ = apply_ops(payload(), [{"op": "clone", "index": 1, "name": "Portal 2",
+                                        "fields": {"name": "Portal 2 (modded)"}}])
+        copy_entry = [a for a in out["apps"] if a["name"] == "Portal 2 (modded)"][0]
+        self.assertNotIn(MARKER, copy_entry)
+
+    def test_the_original_is_untouched(self):
+        out, _ = apply_ops(payload(), [{"op": "clone", "index": 1, "name": "Portal 2",
+                                        "fields": {"name": "Copy", "cmd": "other"}}])
+        original = [a for a in out["apps"] if a["name"] == "Portal 2"][0]
+        self.assertEqual(original["cmd"], "steam -applaunch 620")
+
+    def test_the_copy_lands_next_to_the_original(self):
+        out, _ = apply_ops(payload(), [{"op": "clone", "index": 1, "name": "Portal 2",
+                                        "fields": {"name": "Copy"}}])
+        self.assertEqual(names(out), ["Desktop", "Portal 2", "Copy"])
+
+    def test_a_copy_needs_a_name(self):
+        _, res = apply_ops(payload(), [{"op": "clone", "index": 1, "name": "Portal 2",
+                                        "fields": {"name": ""}}])
+        self.assertFalse(res[0]["ok"])
+
+
+class TestDeleteAndHide(unittest.TestCase):
+    """Same immediate result, opposite long-term behaviour."""
+
+    def test_delete_removes_it_and_forgets_it_so_a_scan_finds_it_again(self):
+        out, _ = apply_ops(payload(), [{"op": "delete", "index": 1, "name": "Portal 2"}])
+        self.assertNotIn("Portal 2", names(out))
+        self.assertEqual(out["meta"]["managed"], [])
+        self.assertEqual(out["meta"]["removed"], [])
+
+    def test_hide_removes_it_and_records_it_so_it_stays_gone(self):
+        out, _ = apply_ops(payload(), [{"op": "hide", "index": 1, "name": "Portal 2"}])
+        self.assertNotIn("Portal 2", names(out))
+        self.assertEqual(out["meta"]["managed"], [])
+        self.assertEqual(out["meta"]["removed"][0]["id"], "620")
+
+    def test_hiding_keeps_the_artwork_for_the_muted_tile(self):
+        out, _ = apply_ops(payload(), [{"op": "hide", "index": 1, "name": "Portal 2"}])
+        self.assertEqual(out["meta"]["removed"][0]["image-path"], "/img/620.png")
+
+    def test_hiding_something_the_importer_never_made_is_refused(self):
+        """Nothing would bring it back, so hiding is just deleting with extra steps."""
+        _, res = apply_ops(payload(), [{"op": "hide", "index": 0, "name": "Desktop"}])
+        self.assertFalse(res[0]["ok"])
+        self.assertIn("same as deleting", res[0]["error"])
+
+    def test_deleting_an_unmanaged_entry_is_fine(self):
+        out, res = apply_ops(payload(), [{"op": "delete", "index": 0, "name": "Desktop"}])
+        self.assertTrue(res[0]["ok"])
+        self.assertNotIn("Desktop", names(out))
+
+    def test_hiding_twice_does_not_duplicate_the_tombstone(self):
+        out, _ = apply_ops(payload(), [{"op": "hide", "index": 1, "name": "Portal 2"}])
+        out["apps"].append(tag({"name": "Portal 2", "cmd": "x"}, "steam", "620"))
+        out["meta"]["managed"] = ["steam:620"]
+        out2, _ = apply_ops(out, [{"op": "hide", "index": 2, "name": "Portal 2"}])
+        self.assertEqual(len(out2["meta"]["removed"]), 1)
+
+
+class TestRestore(unittest.TestCase):
+    def test_restore_clears_the_tombstone(self):
+        hidden, _ = apply_ops(payload(), [{"op": "hide", "index": 1, "name": "Portal 2"}])
+        out, res = apply_ops(hidden, [{"op": "restore", "selector": "steam:620"}])
+        self.assertTrue(res[0]["ok"])
+        self.assertEqual(out["meta"]["removed"], [])
+
+    def test_restoring_something_not_hidden_is_refused(self):
+        _, res = apply_ops(payload(), [{"op": "restore", "selector": "steam:999"}])
+        self.assertFalse(res[0]["ok"])
+
+
+class TestAddAndBatch(unittest.TestCase):
+    def test_a_new_entry_is_appended_unmarked(self):
+        out, _ = apply_ops(payload(), [{"op": "add", "fields": {"name": "Mine", "cmd": "x"}}])
+        self.assertEqual(names(out)[-1], "Mine")
+        self.assertNotIn(MARKER, out["apps"][-1])
+
+    def test_a_nameless_entry_is_refused(self):
+        _, res = apply_ops(payload(), [{"op": "add", "fields": {"cmd": "x"}}])
+        self.assertFalse(res[0]["ok"])
+
+    def test_one_bad_operation_does_not_abandon_the_rest(self):
+        out, res = apply_ops(payload(), [
+            {"op": "edit", "index": 99, "name": "Nope", "fields": {"cmd": "x"}},
+            {"op": "add", "fields": {"name": "Mine", "cmd": "x"}},
+        ])
+        self.assertFalse(res[0]["ok"])
+        self.assertTrue(res[1]["ok"])
+        self.assertIn("Mine", names(out))
+
+    def test_the_input_payload_is_not_mutated(self):
+        p = payload()
+        apply_ops(p, [{"op": "delete", "index": 1, "name": "Portal 2"}])
+        self.assertIn("Portal 2", names(p))
+
+    def test_other_top_level_keys_survive(self):
+        out, _ = apply_ops(payload(), [{"op": "add", "fields": {"name": "Mine"}}])
+        self.assertEqual(out["env"], {"PATH": "x"})
+
+
+if __name__ == "__main__":
+    unittest.main()
