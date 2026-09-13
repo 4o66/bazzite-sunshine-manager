@@ -29,6 +29,7 @@ from typing import Dict, Any
 
 # Safe to import local modules now
 from common.utils import log, write_json  # noqa: E402
+from common.sunshine_api import reload_sunshine  # noqa: E402
 from importers.steam import import_steam  # noqa: E402
 from importers.heroic import import_heroic  # noqa: E402
 from importers.launchers import import_launchers
@@ -117,6 +118,12 @@ def main(argv: list[str]) -> int:
     }
     write_json(apps_json, payload)
     log(f"Wrote {len(apps)} apps. Enabled importers: {', '.join(enabled_importers) or 'none'}")
+
+    # Sunshine has no file watcher, so the file we just wrote is invisible to it
+    # until it re-reads. Ask it to, rather than restarting and dropping whatever
+    # stream is in progress.
+    if getenv_flag("BSM_RELOAD", False):
+        reload_sunshine(conf_dir)
 
     return 0
 
