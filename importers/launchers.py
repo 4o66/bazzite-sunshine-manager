@@ -16,6 +16,7 @@ POSTERS = {
 }
 
 NAMES = {
+    "apps-ui": "Zz Apps Import",
     "desktop": "#1 Desktop",
     "steam": "Zz Steam",
     "heroic": "Zz Heroic",
@@ -74,6 +75,22 @@ def _heroic_cmd(home: str) -> tuple[str, str]:
     if have_cmd("heroic"):
         return ("heroic", home)
     return ("", "")
+
+def _apps_ui(home: str) -> tuple[str, str]:
+    """Return (cmd, poster) for the companion UI if installed, else ('', '').
+
+    Detected by the launcher being on disk, the same way Steam and Heroic are
+    detected by their directories. Nothing is imported from it.
+    """
+    poster = f"{home}/.local/share/sunshine-apps-ui/assets/poster.png"
+    poster = poster if os.path.isfile(poster) else ""
+    local = f"{home}/.local/bin/sunshine-apps-ui"
+    if os.path.isfile(local) and os.access(local, os.X_OK):
+        return (local, poster)
+    if have_cmd("sunshine-apps-ui"):
+        return ("sunshine-apps-ui", poster)
+    return ("", "")
+
 
 def _common_fields() -> Dict[str, Any]:
     return {
@@ -173,7 +190,24 @@ def import_launchers(home: str, conf_dir: str, images_dir: str, settings: Dict[s
     else:
         log("Heroic not detected; skipping Heroic launcher")
 
-    # 4) Reboot
+    # 4) The companion UI, if it is installed
+    ui_cmd, ui_poster = _apps_ui(home)
+    if ui_cmd:
+        apps.append(tag({
+            "name": NAMES["apps-ui"],
+            "cmd": ui_cmd,
+            "working-dir": home,
+            "image-path": ui_poster,
+            "detached": False,
+            "elevated": False,
+            "exit-on-close": True,
+            **_common_fields(),
+        }, "launcher", "apps-ui"))
+        log(f"Added {yn(NAMES['apps-ui'])} launcher")
+    else:
+        log("sunshine-apps-ui not detected; skipping its launcher")
+
+    # 5) Reboot
     apps.append(tag({
         "name": NAMES["reboot"],
         "auto-detach": True,
