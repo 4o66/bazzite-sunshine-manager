@@ -10,7 +10,8 @@ from unittest import mock
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from common import sunshine_api  # noqa: E402
-from common.sunshine_api import SunshineAPIError, SunshineClient, load_credentials  # noqa: E402
+from common.sunshine_api import (SunshineAPIError, SunshineClient,  # noqa: E402
+                                 load_credentials, save_credentials)
 
 
 def conf_dir_with(creds=None, mode=0o600, cacert=True):
@@ -41,8 +42,21 @@ class TestCredentials(unittest.TestCase):
             del os.environ["SUNSHINE_USERNAME"], os.environ["SUNSHINE_PASSWORD"]
 
     def test_file_is_read(self):
-        d = conf_dir_with("username = admin\npassword = hunter2\n")
+        d = conf_dir_with("username=admin\npassword=hunter2\n")
         self.assertEqual(load_credentials(d), ("admin", "hunter2"))
+
+    def test_username_padding_is_tolerated(self):
+        d = conf_dir_with("username = admin \npassword=hunter2\n")
+        self.assertEqual(load_credentials(d), ("admin", "hunter2"))
+
+    def test_a_password_is_taken_verbatim(self):
+        """Trimming it would turn a real password into a baffling auth failure."""
+        d = conf_dir_with("username=admin\npassword=  spaced  \n")
+        self.assertEqual(load_credentials(d)[1], "  spaced  ")
+
+    def test_a_password_containing_equals_survives(self):
+        d = conf_dir_with("username=admin\npassword=a=b=c\n")
+        self.assertEqual(load_credentials(d)[1], "a=b=c")
 
     def test_comments_and_blank_lines_are_ignored(self):
         d = conf_dir_with("# mine\n\nusername=admin\npassword=hunter2\n")
@@ -134,6 +148,48 @@ class TestReload(unittest.TestCase):
         with mock.patch.object(sunshine_api, "SunshineClient",
                                side_effect=SunshineAPIError("nope")):
             self.assertFalse(sunshine_api.reload_sunshine(self.d))
+
+
+class TestSaveCredentials(unittest.TestCase):
+    def setUp(self):
+        self.d = conf_dir_with(None)
+        self.verified = []
+        patcher = mock.patch.object(
+            sunshine_api, "verify_credentials",
+            side_effect=lambda cd, u, p, **kw: self.verified.append((u, p)))
+        patcher.start()
+        self.addCleanup(patcher.stop)
+
+    def test_it_verifies_before_writing_anything(self):
+        save_credentials(self.d, "admin", "hunter2")
+        self.assertEqual(self.verified, [("admin", "hunter2")])
+
+    def test_a_rejected_credential_is_not_written(self):
+        with mock.patch.object(sunshine_api, "verify_credentials",
+                               side_effect=SunshineAPIError("nope")):
+            with self.assertRaises(SunshineAPIError):
+                save_credentials(self.d, "admin", "wrong")
+        self.assertFalse(os.path.exists(
+            os.path.join(self.d, sunshine_api.CREDENTIALS_FILE)))
+
+    def test_the_file_is_created_mode_600_from_the_outset(self):
+        """Never create readable then narrow -- that leaves a window."""
+        path = save_credentials(self.d, "admin", "hunter2")
+        self.assertEqual(stat.S_IMODE(os.stat(path).st_mode), 0o600)
+
+    def test_it_round_trips_through_load(self):
+        save_credentials(self.d, "admin", "p@ss word=with=signs")
+        self.assertEqual(load_credentials(self.d), ("admin", "p@ss word=with=signs"))
+
+    def test_a_newline_in_a_password_is_refused_not_truncated(self):
+        with self.assertRaises(SunshineAPIError) as cm:
+            save_credentials(self.d, "admin", "two\nlines")
+        self.assertIn("newline", str(cm.exception))
+
+    def test_empty_values_are_refused(self):
+        for user, password in (("", "p"), ("u", "")):
+            with self.assertRaises(SunshineAPIError):
+                save_credentials(self.d, user, password)
 
 
 if __name__ == "__main__":

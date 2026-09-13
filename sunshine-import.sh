@@ -9,6 +9,10 @@
 #   --heroic / --no-heroic         Enable/disable Heroic importer (IMPORT_HEROIC=1/0)
 #   --launchers / --no-launchers   Enable/disable Launchers importer (IMPORT_LAUNCHERS=1/0)
 #   --restart                      Restart Sunshine after import (systemctl --user restart sunshine.service)
+#   --check-auth                   Test the stored Sunshine credentials and exit.
+#   --save-auth                    Read a username and password as two lines on
+#                                  stdin, verify them against Sunshine, and store
+#                                  them mode 600. Never pass them as arguments.
 #   --reload                       Ask Sunshine to re-read apps.json via its own API,
 #                                  without restarting. Keeps any stream alive.
 #                                  Needs SUNSHINE_USERNAME/SUNSHINE_PASSWORD or a
@@ -64,6 +68,8 @@ while (( "$#" )); do
     --no-launchers) IMPORT_LAUNCHERS=0; shift ;;
     --restart)      RESTART=1; shift ;;
     --reload)       BSM_RELOAD=1; shift ;;
+    --check-auth)   BSM_CHECK_AUTH=1; shift ;;
+    --save-auth)    BSM_SAVE_AUTH=1; shift ;;
     --python)       PYTHON="${2:-}"; shift 2 ;;
     --conf-dir)     export SUNSHINE_CONF_DIR="${2:-}"; shift 2 ;;
     --sgdb-key)     SGDB_API_KEY="${2:-}"; shift 2 ;;
@@ -89,6 +95,7 @@ fi
 # Environment toggles exported for the Python script
 export IMPORT_STEAM IMPORT_HEROIC IMPORT_LAUNCHERS SGDB_API_KEY SGDB_ENABLE SGDB_TIMEOUT
 export BSM_RELOAD="${BSM_RELOAD:-0}"
+export BSM_CHECK_AUTH="${BSM_CHECK_AUTH:-0}" BSM_SAVE_AUTH="${BSM_SAVE_AUTH:-0}"
 
 echo "[sunshine-import] IMPORT_STEAM=$IMPORT_STEAM IMPORT_HEROIC=$IMPORT_HEROIC IMPORT_LAUNCHERS=$IMPORT_LAUNCHERS RESTART=$RESTART" >&2
 if [[ -n "${SUNSHINE_CONF_DIR:-}" ]]; then
