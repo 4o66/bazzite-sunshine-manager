@@ -20,6 +20,7 @@ Features:
 - Support for poster/thumbnail artwork organization
 """
 
+import json
 import sys
 import os
 import json
@@ -40,7 +41,8 @@ from common.reconcile import MARKER, backup, log_plan, reconcile  # noqa: E402
 from common.system_apps import (find_system_apps_json, load_system_apps,  # noqa: E402
                                 restore_missing)
 from common.utils import log, write_json  # noqa: E402
-from common.sunshine_api import reload_sunshine  # noqa: E402
+from common.sunshine_api import (SunshineAPIError, reload_sunshine,  # noqa: E402
+                                 save_credentials, verify_credentials)
 from importers.steam import import_steam  # noqa: E402
 from importers.heroic import import_heroic  # noqa: E402
 from importers.launchers import import_launchers
@@ -109,12 +111,53 @@ def getenv_flag(name: str, default: bool) -> bool:
     return str(val).strip().lower() in ("1", "true", "yes", "on")
 
 
+def _auth_result(ok: bool, message: str, as_json: bool) -> int:
+    if as_json:
+        json.dump({"ok": ok, "message": message}, sys.stdout)
+        sys.stdout.write("\n")
+    log(message)
+    return 0 if ok else 1
+
+
+def check_auth(conf_dir: str, as_json: bool) -> int:
+    """Are stored credentials present and accepted by Sunshine?"""
+    try:
+        from common.sunshine_api import SunshineClient, load_credentials
+        user, password = load_credentials(conf_dir)
+        verify_credentials(conf_dir, user, password)
+        return _auth_result(True, f"Sunshine accepted the stored credentials for {user!r}.", as_json)
+    except SunshineAPIError as e:
+        return _auth_result(False, str(e), as_json)
+
+
+def save_auth(conf_dir: str, as_json: bool) -> int:
+    """Read username and password as two lines on stdin, verify, store.
+
+    stdin rather than arguments: argv is visible in ps and lands in shell
+    history, and a password is exactly the thing that must not be there.
+    """
+    data = sys.stdin.read().splitlines()
+    user = data[0].strip() if len(data) > 0 else ""
+    password = data[1] if len(data) > 1 else ""
+    try:
+        path = save_credentials(conf_dir, user, password)
+        return _auth_result(True, f"Verified and saved to {path}", as_json)
+    except SunshineAPIError as e:
+        return _auth_result(False, str(e), as_json)
+
+
 def main(argv: list[str]) -> int:
     dry_run = getenv_flag("BSM_DRY_RUN", False)
     as_json = getenv_flag("BSM_JSON", False)
     home = str(Path.home())
     conf_dir = detect_sunshine_config_dir(home)
     os.makedirs(conf_dir, exist_ok=True)
+
+    # Credential modes exit before any scanning or writing happens.
+    if getenv_flag("BSM_CHECK_AUTH", False):
+        return check_auth(conf_dir, as_json)
+    if getenv_flag("BSM_SAVE_AUTH", False):
+        return save_auth(conf_dir, as_json)
 
     # Paths
     apps_json = os.path.join(conf_dir, "apps.json")

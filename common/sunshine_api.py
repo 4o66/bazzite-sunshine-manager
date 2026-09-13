@@ -61,11 +61,16 @@ def load_credentials(conf_dir: str) -> Tuple[str, str]:
     values: Dict[str, str] = {}
     with open(path, "r", encoding="utf-8") as handle:
         for line in handle:
-            line = line.strip()
-            if not line or line.startswith("#") or "=" not in line:
+            line = line.rstrip("\n").rstrip("\r")
+            if not line.strip() or line.lstrip().startswith("#") or "=" not in line:
                 continue
             key, _, value = line.partition("=")
-            values[key.strip().lower()] = value.strip()
+            key = key.strip().lower()
+            # The password is taken verbatim apart from the line ending. Trimming
+            # it would silently turn a password with a leading or trailing space
+            # into a baffling authentication failure. The username is trimmed,
+            # since Sunshine compares it case-insensitively anyway.
+            values[key] = value if key == "password" else value.strip()
     if not values.get("username") or not values.get("password"):
         raise SunshineAPIError(f"{path} needs both 'username=' and 'password=' lines")
     return values["username"], values["password"]
@@ -88,6 +93,36 @@ def _tls_context(conf_dir: str) -> ssl.SSLContext:
     ctx = ssl.create_default_context(cafile=cafile)
     ctx.check_hostname = False
     return ctx
+
+
+def verify_credentials(conf_dir: str, user: str, password: str,
+                       base_url: str = DEFAULT_BASE_URL) -> None:
+    """Raise SunshineAPIError unless Sunshine accepts these credentials."""
+    client = SunshineClient.__new__(SunshineClient)
+    client.base_url = base_url.rstrip("/")
+    client.timeout = 10
+    client._ctx = _tls_context(conf_dir)
+    token = base64.b64encode(f"{user}:{password}".encode("utf-8")).decode("ascii")
+    client._auth = f"Basic {token}"
+    client.get_apps()
+
+
+def save_credentials(conf_dir: str, user: str, password: str) -> str:
+    """Verify first, then write mode-600. Returns the path written."""
+    if not user or not password:
+        raise SunshineAPIError("Both a username and a password are required")
+    if "\n" in password or "\r" in password or "\n" in user or "\r" in user:
+        # The file is one key=value per line, so a newline could not be read back.
+        raise SunshineAPIError("A username or password containing a newline cannot be stored")
+    verify_credentials(conf_dir, user, password)
+    path = os.path.join(conf_dir, CREDENTIALS_FILE)
+    # Create with restrictive permissions from the outset rather than widening
+    # then narrowing, which would leave a readable window.
+    fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+    with os.fdopen(fd, "w", encoding="utf-8") as handle:
+        handle.write(f"username={user}\npassword={password}\n")
+    os.chmod(path, 0o600)
+    return path
 
 
 class SunshineClient:
