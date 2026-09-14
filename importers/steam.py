@@ -4,6 +4,7 @@ from common.utils import log, yn, read_json
 from common.images import steam_local_to_png, steam_cdn_to_png, steam_sgdb_to_png
 from common.image_downloader import ImageDownloader
 from common.reconcile import tag
+from common.artwork_sources import find_steam_root
 
 def import_steam(home: str, conf_dir: str, images_dir: str, settings: Dict[str, Any],
                  report: Dict[str, Any] = None) -> List[Dict[str, Any]]:
@@ -18,13 +19,9 @@ def import_steam(home: str, conf_dir: str, images_dir: str, settings: Dict[str, 
     if not IMPORT_STEAM:
         log("Steam import disabled."); report["status"] = "disabled"; return []
 
-    steam_root = None; steam_mode = None
-    flatpak_root = f"{home}/.var/app/com.valvesoftware.Steam/.local/share/Steam"
-    native_roots = [f"{home}/.local/share/Steam", f"{home}/.steam/steam"]
-    if os.path.isdir(flatpak_root): steam_root = flatpak_root; steam_mode = "flatpak"
-    else:
-        for r in native_roots:
-            if os.path.isdir(r): steam_root = r; steam_mode = "native"; break
+    # Shared with the artwork picker, which needs the same root to offer the
+    # library cache Steam has already filled in.
+    steam_root, steam_mode = find_steam_root(home)
 
     if not steam_root or not os.path.isdir(os.path.join(steam_root, "steamapps")):
         log("Steam not found; skipping Steam import."); return []

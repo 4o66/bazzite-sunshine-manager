@@ -15,6 +15,18 @@
 #                                  ({"ops":[...]}). Combine with --reload.
 #   --state                        Report what is in apps.json now (not what would
 #                                  change) and exit. Use with --json.
+#   --art-search                   List every piece of cover art available for one
+#                                  app, each cached ready to choose. Identify the
+#                                  app with --art-source/--art-ident (its ownership
+#                                  marker) and --art-name. Use with --json.
+#   --art-choose ID                Copy candidate ID from that list into the images
+#                                  tree and report the image-path to use.
+#   --art-name NAME                The app's name: searched for on SteamGridDB, and
+#                                  used to name the chosen file.
+#   --art-source S --art-ident I   The app's ownership marker, e.g. steam / 526870.
+#   --save-sgdb-key                Read a SteamGridDB key on stdin, check it against
+#                                  the API, store it mode 600. Use this rather than
+#                                  --sgdb-key, which puts the key in ps and history.
 #   --check-auth                   Test the stored Sunshine credentials and exit.
 #   --save-auth                    Read a username and password as two lines on
 #                                  stdin, verify them against Sunshine, and store
@@ -103,6 +115,12 @@ while (( "$#" )); do
     --mutate)       BSM_MUTATE=1; shift ;;
     --browse)       BSM_BROWSE=1; BSM_BROWSE_PATH="${2:-}"; shift 2 ;;
     --browse-type)  BSM_BROWSE_TYPE="${2:-any}"; shift 2 ;;
+    --art-search)   BSM_ART_SEARCH=1; shift ;;
+    --art-choose)   BSM_ART_CHOOSE="${2:-}"; shift 2 ;;
+    --art-name)     BSM_ART_NAME="${2:-}"; shift 2 ;;
+    --art-source)   BSM_ART_SOURCE="${2:-}"; shift 2 ;;
+    --art-ident)    BSM_ART_IDENT="${2:-}"; shift 2 ;;
+    --save-sgdb-key) BSM_SAVE_SGDB_KEY=1; shift ;;
     --check-auth)   BSM_CHECK_AUTH=1; shift ;;
     --save-auth)    BSM_SAVE_AUTH=1; shift ;;
     --python)       PYTHON="${2:-}"; shift 2 ;;
@@ -161,6 +179,10 @@ export BSM_CHECK_AUTH="${BSM_CHECK_AUTH:-0}" BSM_SAVE_AUTH="${BSM_SAVE_AUTH:-0}"
 export BSM_STATE="${BSM_STATE:-0}" BSM_MUTATE="${BSM_MUTATE:-0}"
 export BSM_BROWSE="${BSM_BROWSE:-0}" BSM_BROWSE_PATH="${BSM_BROWSE_PATH:-}"
 export BSM_BROWSE_TYPE="${BSM_BROWSE_TYPE:-any}"
+export BSM_ART_SEARCH="${BSM_ART_SEARCH:-0}" BSM_ART_CHOOSE="${BSM_ART_CHOOSE:-}"
+export BSM_ART_NAME="${BSM_ART_NAME:-}" BSM_ART_SOURCE="${BSM_ART_SOURCE:-}"
+export BSM_ART_IDENT="${BSM_ART_IDENT:-}"
+export BSM_SAVE_SGDB_KEY="${BSM_SAVE_SGDB_KEY:-0}"
 
 echo "[sunshine-import] IMPORT_STEAM=$IMPORT_STEAM IMPORT_HEROIC=$IMPORT_HEROIC IMPORT_LAUNCHERS=$IMPORT_LAUNCHERS RESTART=$RESTART" >&2
 if [[ -n "${SUNSHINE_CONF_DIR:-}" ]]; then

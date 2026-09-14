@@ -39,6 +39,9 @@ from common.reconcile import (MARKER, SCHEMA_VERSION, backup, log_plan,  # noqa:
 from common.system_apps import (find_system_apps_json, load_system_apps,  # noqa: E402
                                 restore_missing)
 from common.mutate import apply_ops  # noqa: E402
+from common.artwork_sources import (ArtworkError, choose_artwork,  # noqa: E402
+                                    find_candidates, find_steam_root,
+                                    load_sgdb_key, save_sgdb_key)
 from common.sunshine_api import (SunshineAPIError, reload_sunshine,  # noqa: E402
                                  save_credentials, verify_credentials)
 from importers.steam import import_steam  # noqa: E402
@@ -179,6 +182,65 @@ def browse(conf_dir: str, as_json: bool) -> int:
     return 0
 
 
+def art_search(conf_dir: str, as_json: bool) -> int:
+    """Offer every piece of cover art available for one app.
+
+    The importer settles for the first artwork that works, which is why a game
+    that has been rebranded keeps its old badge forever. This lists the
+    alternatives so a person can pick, and caches each one so picking is a copy.
+    """
+    home = str(Path.home())
+    steam_root, _ = find_steam_root(home)
+    result = find_candidates(
+        conf_dir,
+        name=os.getenv("BSM_ART_NAME", ""),
+        source=os.getenv("BSM_ART_SOURCE", ""),
+        ident=os.getenv("BSM_ART_IDENT", ""),
+        steam_root=steam_root,
+        sgdb_key=load_sgdb_key(conf_dir),
+        sgdb_enable=getenv_flag("SGDB_ENABLE", True),
+        timeout=int(os.getenv("SGDB_TIMEOUT", "8") or 8),
+    )
+    doc = {"ok": True, **result}
+    if as_json:
+        json.dump(doc, sys.stdout, indent=2)
+        sys.stdout.write("\n")
+    else:
+        for candidate in result["candidates"]:
+            log(f"{candidate['id']}  {candidate['source']:12} {candidate['label']}")
+        for note in result["notes"]:
+            log(note)
+    return 0
+
+
+def art_choose(conf_dir: str, as_json: bool) -> int:
+    """Copy a cached candidate into the images tree and say where it landed."""
+    try:
+        path = choose_artwork(conf_dir, os.getenv("BSM_ART_CHOOSE", ""),
+                              os.getenv("BSM_ART_NAME", ""))
+    except (ArtworkError, OSError) as e:
+        if as_json:
+            json.dump({"ok": False, "message": str(e)}, sys.stdout)
+            sys.stdout.write("\n")
+        log(str(e))
+        return 1
+    if as_json:
+        json.dump({"ok": True, "image-path": path}, sys.stdout, indent=2)
+        sys.stdout.write("\n")
+    else:
+        log(f"Artwork saved: {path}")
+    return 0
+
+
+def save_sgdb(conf_dir: str, as_json: bool) -> int:
+    """Read a SteamGridDB key on stdin, check it, store it mode-600."""
+    try:
+        path = save_sgdb_key(conf_dir, sys.stdin.readline())
+    except (ArtworkError, OSError) as e:
+        return _auth_result(False, str(e), as_json)
+    return _auth_result(True, f"Verified and saved to {path}", as_json)
+
+
 def dump_state(conf_dir: str, as_json: bool) -> int:
     """Emit what is in apps.json right now, for a front end to render.
 
@@ -270,6 +332,12 @@ def main(argv: list[str]) -> int:
         return check_auth(conf_dir, as_json)
     if getenv_flag("BSM_SAVE_AUTH", False):
         return save_auth(conf_dir, as_json)
+    if getenv_flag("BSM_ART_SEARCH", False):
+        return art_search(conf_dir, as_json)
+    if os.getenv("BSM_ART_CHOOSE", ""):
+        return art_choose(conf_dir, as_json)
+    if getenv_flag("BSM_SAVE_SGDB_KEY", False):
+        return save_sgdb(conf_dir, as_json)
 
     # Paths
     apps_json = os.path.join(conf_dir, "apps.json")
@@ -350,6 +418,10 @@ def main(argv: list[str]) -> int:
         enabled_importers.append("heroic")
 
     settings: Dict[str, Any] = dict(os.environ)
+    # A key stored by --save-sgdb-key serves a scan as well as the picker, and
+    # keeps it out of argv, where --sgdb-key puts it.
+    if not str(settings.get("SGDB_API_KEY", "")).strip():
+        settings["SGDB_API_KEY"] = load_sgdb_key(conf_dir)
 
     # Collect apps from enabled importers, recording how each one fared. A source
     # that raised is not the same as a source that found nothing, and consumers
