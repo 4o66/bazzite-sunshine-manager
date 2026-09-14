@@ -174,3 +174,63 @@ class TestAddAndBatch(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class TestAdopt(unittest.TestCase):
+    """Taking what a scan offered, exactly as the importer would have written it."""
+
+    def _discovered(self):
+        return tag({"name": "TF2", "cmd": "steam -applaunch 440",
+                    "image-path": "/img/440.png"}, "steam", "440")
+
+    def test_the_entry_is_written_with_its_marker_intact(self):
+        out, res = apply_ops(payload(), [{"op": "adopt", "entry": self._discovered()}])
+        self.assertTrue(res[0]["ok"])
+        added = [a for a in out["apps"] if a["name"] == "TF2"][0]
+        self.assertIn(MARKER, added)
+
+    def test_it_is_registered_as_managed_so_a_later_scan_recognises_it(self):
+        out, _ = apply_ops(payload(), [{"op": "adopt", "entry": self._discovered()}])
+        self.assertIn("steam:440", out["meta"]["managed"])
+
+    def test_adopting_twice_does_not_duplicate(self):
+        once, _ = apply_ops(payload(), [{"op": "adopt", "entry": self._discovered()}])
+        twice, _ = apply_ops(once, [{"op": "adopt", "entry": self._discovered()}])
+        self.assertEqual([a["name"] for a in twice["apps"]].count("TF2"), 1)
+
+    def test_adopting_clears_any_tombstone_for_it(self):
+        p = payload()
+        p["meta"]["removed"] = [{"name": "TF2", "source": "steam", "id": "440"}]
+        out, _ = apply_ops(p, [{"op": "adopt", "entry": self._discovered()}])
+        self.assertEqual(out["meta"]["removed"], [])
+
+    def test_an_unmarked_entry_cannot_be_adopted(self):
+        _, res = apply_ops(payload(), [{"op": "adopt", "entry": {"name": "X"}}])
+        self.assertFalse(res[0]["ok"])
+        self.assertIn("no ownership marker", res[0]["error"])
+
+
+class TestSuppress(unittest.TestCase):
+    """Refusing something a scan offered, before it exists in the file."""
+
+    def test_it_records_a_tombstone_without_needing_an_entry(self):
+        out, res = apply_ops(payload(), [{"op": "suppress", "source": "steam",
+                                          "id": "440", "name": "TF2"}])
+        self.assertTrue(res[0]["ok"])
+        self.assertEqual(out["meta"]["removed"][0]["id"], "440")
+
+    def test_it_keeps_the_artwork_for_the_muted_tile(self):
+        out, _ = apply_ops(payload(), [{"op": "suppress", "source": "steam", "id": "440",
+                                        "name": "TF2", "image-path": "/img/440.png"}])
+        self.assertEqual(out["meta"]["removed"][0]["image-path"], "/img/440.png")
+
+    def test_suppressing_twice_is_refused_rather_than_duplicated(self):
+        once, _ = apply_ops(payload(), [{"op": "suppress", "source": "steam",
+                                         "id": "440", "name": "TF2"}])
+        _, res = apply_ops(once, [{"op": "suppress", "source": "steam",
+                                   "id": "440", "name": "TF2"}])
+        self.assertFalse(res[0]["ok"])
+
+    def test_it_needs_a_source_and_id(self):
+        _, res = apply_ops(payload(), [{"op": "suppress", "name": "TF2"}])
+        self.assertFalse(res[0]["ok"])

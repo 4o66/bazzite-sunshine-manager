@@ -69,7 +69,46 @@ def apply_ops(payload: Dict[str, Any],
     for op in ops:
         kind = str(op.get("op", ""))
         try:
-            if kind == "add":
+            if kind == "adopt":
+                # An entry the importer discovered, written exactly as it would
+                # have written it: ownership marker intact, registered as
+                # managed, so a later scan recognises it instead of duplicating.
+                entry = op.get("entry")
+                if not isinstance(entry, dict) or not entry.get("name"):
+                    raise MutateError("Nothing to adopt")
+                ident = identity(entry)
+                if ident is None:
+                    raise MutateError(f"{entry.get('name')!r} has no ownership marker")
+                key = selector(ident)
+                existing = next((i for i, a in enumerate(apps)
+                                 if identity(a) == ident), None)
+                if existing is None:
+                    apps.append(dict(entry))
+                else:
+                    apps[existing] = dict(entry)
+                if key not in managed:
+                    managed.append(key)
+                removed = [t for t in removed
+                           if f"{t.get('source')}:{t.get('id')}" != key]
+                results.append({"op": kind, "ok": True, "name": entry["name"]})
+
+            elif kind == "suppress":
+                # Refusing something a scan offered, before it ever exists in
+                # the file. hide cannot do this: there is no entry to remove.
+                source, ident_id = str(op.get("source", "")), str(op.get("id", ""))
+                if not source or not ident_id:
+                    raise MutateError("Nothing to suppress")
+                key = f"{source}:{ident_id}"
+                if any(f"{t.get('source')}:{t.get('id')}" == key for t in removed):
+                    raise MutateError(f"{op.get('name') or key} is already hidden")
+                grave = {"name": op.get("name"), "source": source, "id": ident_id,
+                         "at": time.strftime("%Y-%m-%dT%H:%M:%S%z")}
+                if op.get("image-path"):
+                    grave["image-path"] = op["image-path"]
+                removed.append(grave)
+                results.append({"op": kind, "ok": True, "name": op.get("name")})
+
+            elif kind == "add":
                 entry = _clean(op.get("fields"))
                 if not entry.get("name"):
                     raise MutateError("A new application needs a name")

@@ -281,3 +281,25 @@ class TestTombstoneArtwork(unittest.TestCase):
         g = tag({"name": "X", "cmd": "x", "image-path": ""}, "launcher", "x")
         _, plan = reconcile([], [g], previously_managed=["launcher:x"])
         self.assertNotIn("image-path", plan["tombstones"][0])
+
+
+class TestPlanCarriesPayload(unittest.TestCase):
+    """A front end that stages a plan needs the entries, not just their names."""
+
+    def test_an_added_entry_carries_itself(self):
+        g = game()
+        _, plan = reconcile([], [g])
+        self.assertEqual(plan["added"][0]["entry"]["name"], "Portal 2")
+        self.assertIn(MARKER, plan["added"][0]["entry"])
+
+    def test_an_updated_entry_carries_the_new_values(self):
+        out, _ = reconcile([], [game()])
+        _, plan = reconcile(out, [game(image="/new.png")])
+        self.assertEqual(plan["updated"][0]["values"]["image-path"], "/new.png")
+        self.assertEqual(plan["updated"][0]["entry"]["image-path"], "/new.png")
+
+    def test_the_payload_is_a_copy_not_a_reference(self):
+        g = game()
+        out, plan = reconcile([], [g])
+        plan["added"][0]["entry"]["name"] = "mutated"
+        self.assertEqual(out[0]["name"], "Portal 2")

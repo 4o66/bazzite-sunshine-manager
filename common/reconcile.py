@@ -214,7 +214,9 @@ def reconcile(existing: List[Dict[str, Any]], desired: List[Dict[str, Any]],
                                      "id": ident[1], "fields": diverged})
         if changed:
             plan["updated"].append({"name": merged.get("name"), "source": ident[0],
-                                    "id": ident[1], "fields": changed})
+                                    "id": ident[1], "fields": changed,
+                                    "values": {k: merged.get(k) for k in changed},
+                                    "entry": dict(merged)})
         elif not diverged:
             plan["unchanged"].append({"name": merged.get("name"), "source": ident[0],
                                       "id": ident[1]})
@@ -243,7 +245,10 @@ def reconcile(existing: List[Dict[str, Any]], desired: List[Dict[str, Any]],
             continue
 
         out.append(dict(app))
-        plan["added"].append(entry)
+        # Carry the whole entry, marker included. A front end that stages this
+        # for the user to approve has to write back exactly what the importer
+        # would have written, or the next scan finds it missing and re-adds it.
+        plan["added"].append(dict(entry, entry=dict(app)))
 
     plan["tombstones"] = sorted(graves.values(),
                                 key=lambda t: (str(t.get("source")), str(t.get("id"))))
