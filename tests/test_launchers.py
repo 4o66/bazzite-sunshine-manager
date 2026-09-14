@@ -9,6 +9,7 @@ import os
 import sys
 import tempfile
 import unittest
+from unittest import mock
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
@@ -21,6 +22,14 @@ class LauncherEntryTest(unittest.TestCase):
         self.tmp = tempfile.TemporaryDirectory()
         self.addCleanup(self.tmp.cleanup)
         self.home = self.tmp.name
+        # An empty PATH, so what these tests find is what this test put there.
+        # Without it, a machine with the manager installed passes the test for
+        # it not being installed -- which is how this was first caught.
+        empty = os.path.join(self.home, "nothing")
+        os.makedirs(empty)
+        patched = mock.patch.dict(os.environ, {"PATH": empty})
+        patched.start()
+        self.addCleanup(patched.stop)
         self.images = os.path.join(self.home, "images")
         os.makedirs(self.images)
         # Posters are only downloaded when absent, so putting them there keeps
