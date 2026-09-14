@@ -261,7 +261,12 @@ def dump_state(conf_dir: str, as_json: bool) -> int:
         if not isinstance(app, dict):
             continue
         marker = app.get(MARKER) if isinstance(app.get(MARKER), dict) else None
-        entries.append({
+        # The whole entry, not a summary of it. A front end that shows an edit
+        # form has to show what is actually in the file: reporting five keys
+        # meant "exit-timeout" and every flag rendered empty whatever their real
+        # value, and saving that form wrote those blanks back over them.
+        entry = {k: v for k, v in app.items() if k != MARKER}
+        entry.update({
             "index": index,
             "name": app.get("name"),
             "image-path": app.get("image-path") or "",
@@ -270,6 +275,7 @@ def dump_state(conf_dir: str, as_json: bool) -> int:
             "id": marker.get("id") if marker else None,
             "managed": marker is not None,
         })
+        entries.append(entry)
 
     doc = {
         "schema": SCHEMA_VERSION,
