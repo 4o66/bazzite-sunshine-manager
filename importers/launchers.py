@@ -15,8 +15,12 @@ POSTERS = {
     "reboot":  "https://github.com/wadiebs/bazzite-sunshine-manager/blob/main/common/posters/reboot.png",
 }
 
+# Display names only. The keys are the ownership marker's id and must not
+# change: that is what ties an entry in apps.json to the thing that generated
+# it, so renaming a key would orphan the existing entry and add a second one
+# beside it rather than rename anything.
 NAMES = {
-    "apps-ui": "Zz Apps Import",
+    "apps-ui": "Zz App Manager",
     "desktop": "#1 Desktop",
     "steam": "Zz Steam",
     "heroic": "Zz Heroic",
