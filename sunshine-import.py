@@ -5,10 +5,14 @@ Bazzite Sunshine Manager
 Original author: wadiebs (https://github.com/wadiebs/bazzite-sunshine-manager)
 Date: January 2026
 
-This is 4o66's fork. Its own version is VERSION below; the upstream release it
-is built on is UPSTREAM. Upstream publishes no tags or releases, so the only
-exact statement about what this is based on is the commit, which is why UPSTREAM
-names one alongside the version upstream declares for itself.
+This is 4o66's fork. Its version is built from upstream's so that what it is
+based on is readable at a glance: "2.0+4o66.0.1.0" is upstream 2.0 with this
+fork's 0.1.0 on top. The part after "+" is build metadata in the SemVer sense
+and is ignored when versions are compared, so this never claims to be newer or
+older than upstream's own 2.0 -- only to be built from it.
+
+Upstream publishes no tags or releases, so "2.0" is only what it calls itself.
+UPSTREAM below names the exact commit, which is the only unambiguous statement.
 
 Description:
 Automated importer and manager for Sunshine streaming app configurations.
@@ -34,12 +38,15 @@ import pathlib
 from pathlib import Path
 from typing import Dict, Any
 
-VERSION = "0.1.0"
+UPSTREAM_VERSION = "2.0"        # what upstream calls itself
+FORK_VERSION = "0.1.0"          # what this fork calls itself
+VERSION = f"{UPSTREAM_VERSION}+4o66.{FORK_VERSION}"
 
 # The upstream commit this fork is built on. Kept beside VERSION, and reported
 # in every plan document, so a bug report says which upstream it came from
-# without anyone having to work it out from a diff.
-UPSTREAM = "wadiebs/bazzite-sunshine-manager 2.0 (4bedee5, 2026-04-19)"
+# without anyone having to work it out from a diff. Upstream's version number
+# alone would not: it has said 2.0 across every commit it has ever made.
+UPSTREAM = f"wadiebs/bazzite-sunshine-manager {UPSTREAM_VERSION} (4bedee5, 2026-04-19)"
 
 # Safe to import local modules now
 from common.utils import log, read_json, write_json  # noqa: E402

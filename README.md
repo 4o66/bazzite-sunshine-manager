@@ -1,11 +1,14 @@
 # Bazzite Sunshine Manager
 
-> **This is 4o66's fork**, version **0.1.0**, built on upstream
+> **This is 4o66's fork**, version **`2.0+4o66.0.1.0`** -- upstream's 2.0 with
+> this fork's 0.1.0 on top -- built on upstream
 > [wadiebs/bazzite-sunshine-manager](https://github.com/wadiebs/bazzite-sunshine-manager)
 > **2.0** at commit [`4bedee5`](https://github.com/wadiebs/bazzite-sunshine-manager/commit/4bedee5)
-> (2026-04-19). Upstream publishes no tags or releases, so the commit is the
-> only exact way to say what this is built on. Every plan document repeats it,
-> under `generator.upstream`.
+> (2026-04-19). The part after `+` is build metadata in the SemVer sense, so
+> this never claims to be newer or older than upstream's 2.0, only to be built
+> from it. Upstream publishes no tags or releases and has called itself 2.0 in
+> every commit it has made, so the commit is the only exact way to say what this
+> is built on. Every plan document repeats both, under `generator`.
 >
 > **What this fork adds.** Upstream rewrote `apps.json` from scratch on every
 > run, which deleted anything added through Sunshine's own web UI, including the

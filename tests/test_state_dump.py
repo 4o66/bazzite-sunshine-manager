@@ -93,3 +93,28 @@ class DumpStateTest(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class VersionTest(unittest.TestCase):
+    """The fork's version has to say which upstream it came from.
+
+    Upstream has called itself 2.0 in every commit it has ever made and
+    publishes no tags, so "2.0" alone identifies nothing -- neither whose build
+    this is nor what it was built from.
+    """
+
+    def test_it_begins_with_the_upstream_version(self):
+        self.assertTrue(bsm_cli.VERSION.startswith(bsm_cli.UPSTREAM_VERSION + "+"),
+                        bsm_cli.VERSION)
+
+    def test_it_names_the_fork_and_the_forks_own_version(self):
+        self.assertIn("4o66", bsm_cli.VERSION)
+        self.assertTrue(bsm_cli.VERSION.endswith(bsm_cli.FORK_VERSION), bsm_cli.VERSION)
+
+    def test_the_fork_version_is_build_metadata_not_a_pre_release(self):
+        """A "-" suffix would sort below upstream's 2.0, which is a lie in the
+        other direction."""
+        self.assertNotIn("-", bsm_cli.VERSION)
+
+    def test_the_upstream_commit_is_named_not_just_its_version(self):
+        self.assertIn("4bedee5", bsm_cli.UPSTREAM)
