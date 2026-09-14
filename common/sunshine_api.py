@@ -20,6 +20,7 @@ import json
 import os
 import ssl
 import urllib.error
+import urllib.parse
 import urllib.request
 from typing import Any, Dict, Optional, Tuple
 
@@ -180,6 +181,19 @@ class SunshineClient:
         doc = self._request("GET", "/api/apps")
         if not isinstance(doc, dict) or not isinstance(doc.get("apps"), list):
             raise SunshineAPIError("/api/apps did not return an apps list")
+        return doc
+
+    def browse(self, path: str = "", kind: str = "any") -> Dict[str, Any]:
+        """List a directory through Sunshine, which already has this endpoint.
+
+        Going through Sunshine rather than reading the filesystem ourselves
+        means one implementation of what counts as an executable, and nothing
+        new that can read arbitrary paths.
+        """
+        query = urllib.parse.urlencode({"path": path or "", "type": kind or "any"})
+        doc = self._request("GET", f"/api/browse?{query}")
+        if not isinstance(doc, dict) or not isinstance(doc.get("entries"), list):
+            raise SunshineAPIError("/api/browse did not return a listing")
         return doc
 
     def reload(self) -> str:

@@ -157,6 +157,28 @@ def mutate(conf_dir: str, as_json: bool) -> int:
     return 0 if not failed else 1
 
 
+def browse(conf_dir: str, as_json: bool) -> int:
+    """List a directory, for a front end offering a file picker."""
+    from common.sunshine_api import SunshineClient
+    path = os.getenv("BSM_BROWSE_PATH", "")
+    kind = os.getenv("BSM_BROWSE_TYPE", "any")
+    try:
+        doc = SunshineClient(conf_dir).browse(path, kind)
+    except SunshineAPIError as e:
+        if as_json:
+            json.dump({"ok": False, "message": str(e)}, sys.stdout)
+            sys.stdout.write("\n")
+        log(str(e))
+        return 1
+    doc["ok"] = True
+    if as_json:
+        json.dump(doc, sys.stdout, indent=2)
+        sys.stdout.write("\n")
+    else:
+        log(f"{doc.get('path')}: {len(doc.get('entries', []))} entries")
+    return 0
+
+
 def dump_state(conf_dir: str, as_json: bool) -> int:
     """Emit what is in apps.json right now, for a front end to render.
 
@@ -238,6 +260,8 @@ def main(argv: list[str]) -> int:
     os.makedirs(conf_dir, exist_ok=True)
 
     # Credential modes exit before any scanning or writing happens.
+    if os.getenv("BSM_BROWSE", "") == "1":
+        return browse(conf_dir, as_json)
     if getenv_flag("BSM_MUTATE", False):
         return mutate(conf_dir, as_json)
     if getenv_flag("BSM_STATE", False):
