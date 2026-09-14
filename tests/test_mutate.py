@@ -234,3 +234,78 @@ class TestSuppress(unittest.TestCase):
     def test_it_needs_a_source_and_id(self):
         _, res = apply_ops(payload(), [{"op": "suppress", "name": "TF2"}])
         self.assertFalse(res[0]["ok"])
+
+
+class TestFieldTypes(unittest.TestCase):
+    """Sunshine reads some of these with a type in mind.
+
+    getApps() runs std::stoi over the integer fields, so a string it cannot
+    parse makes Sunshine's whole configuration API answer 400 -- which looked
+    from the front end like the credentials had stopped working.
+    """
+
+    def test_a_blank_integer_field_is_dropped_not_written_as_empty(self):
+        out, res = apply_ops(payload(), [{"op": "edit", "index": 1, "name": "Portal 2",
+                                          "fields": {"exit-timeout": ""}}])
+        self.assertTrue(res[0]["ok"])
+        self.assertNotIn("exit-timeout", out["apps"][1])
+
+    def test_a_numeric_string_becomes_a_number(self):
+        out, _ = apply_ops(payload(), [{"op": "edit", "index": 1, "name": "Portal 2",
+                                        "fields": {"exit-timeout": "5"}}])
+        self.assertEqual(out["apps"][1]["exit-timeout"], 5)
+        self.assertIsInstance(out["apps"][1]["exit-timeout"], int)
+
+    def test_nonsense_in_a_numeric_field_is_refused_with_a_reason(self):
+        _, res = apply_ops(payload(), [{"op": "edit", "index": 1, "name": "Portal 2",
+                                        "fields": {"exit-timeout": "soon"}}])
+        self.assertFalse(res[0]["ok"])
+        self.assertIn("whole number", res[0]["error"])
+
+    def test_checkbox_values_become_real_booleans(self):
+        out, _ = apply_ops(payload(), [{"op": "edit", "index": 1, "name": "Portal 2",
+                                        "fields": {"elevated": "on", "wait-all": False}}])
+        self.assertIs(out["apps"][1]["elevated"], True)
+        self.assertIs(out["apps"][1]["wait-all"], False)
+
+    def test_a_clone_does_not_inherit_an_unparseable_value(self):
+        out, res = apply_ops(payload(), [{"op": "clone", "index": 1, "name": "Portal 2",
+                                          "fields": {"name": "Copy", "exit-timeout": ""}}])
+        self.assertTrue(res[0]["ok"])
+        copy_entry = [a for a in out["apps"] if a["name"] == "Copy"][0]
+        self.assertNotIn("exit-timeout", copy_entry)
+
+
+class TestUnhideBringsItBack(unittest.TestCase):
+    """Clearing a tombstone is not the same as having the app again."""
+
+    def _hidden(self):
+        out, _ = apply_ops(payload(), [{"op": "hide", "index": 1, "name": "Portal 2"}])
+        return out
+
+    def test_hiding_keeps_the_whole_entry(self):
+        out = self._hidden()
+        self.assertEqual(out["meta"]["removed"][0]["entry"]["cmd"],
+                         "steam -applaunch 620")
+
+    def test_un_hiding_returns_the_app_itself(self):
+        out, res = apply_ops(self._hidden(), [{"op": "restore", "selector": "steam:620"}])
+        self.assertTrue(res[0]["ok"])
+        self.assertIn("Portal 2", [a["name"] for a in out["apps"]])
+        self.assertEqual(out["meta"]["removed"], [])
+
+    def test_the_returned_entry_is_managed_again(self):
+        out, _ = apply_ops(self._hidden(), [{"op": "restore", "selector": "steam:620"}])
+        self.assertIn("steam:620", out["meta"]["managed"])
+        restored = [a for a in out["apps"] if a["name"] == "Portal 2"][0]
+        self.assertIn(MARKER, restored)
+
+    def test_un_hiding_reports_the_name_not_the_selector(self):
+        _, res = apply_ops(self._hidden(), [{"op": "restore", "selector": "steam:620"}])
+        self.assertEqual(res[0]["name"], "Portal 2")
+
+    def test_it_does_not_duplicate_if_the_app_is_somehow_back_already(self):
+        hidden = self._hidden()
+        hidden["apps"].append(tag({"name": "Portal 2", "cmd": "x"}, "steam", "620"))
+        out, _ = apply_ops(hidden, [{"op": "restore", "selector": "steam:620"}])
+        self.assertEqual([a["name"] for a in out["apps"]].count("Portal 2"), 1)

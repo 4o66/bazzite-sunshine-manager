@@ -153,6 +153,11 @@ class SunshineClient:
         except urllib.error.HTTPError as e:
             if e.code == 401:
                 raise SunshineAPIError("Sunshine rejected the credentials") from e
+            if e.code == 400:
+                raise SunshineAPIError(
+                    "Sunshine could not read its own apps.json. A field may hold "
+                    "a value of the wrong type, such as a non-numeric exit-timeout."
+                ) from e
             if e.code == 403:
                 raise SunshineAPIError(
                     "Sunshine refused the request. Its origin_web_ui_allowed "

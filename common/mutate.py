@@ -47,10 +47,46 @@ def _find(apps: List[Dict[str, Any]], op: Dict[str, Any]) -> int:
     raise MutateError(f"{expected or index!r} is no longer where it was; reopen the list")
 
 
+# Sunshine reads these with a type in mind. getApps() runs std::stoi over the
+# integer ones and throws if the value is a string it cannot parse, which makes
+# its whole configuration API answer 400 -- so an empty box in a form must not
+# reach the file as "".
+_INTEGER_FIELDS = ("exit-timeout",)
+_BOOLEAN_FIELDS = ("elevated", "auto-detach", "wait-all", "exclude-global-prep-cmd")
+
+
+def _coerce(key: str, value: Any) -> Any:
+    if key in _BOOLEAN_FIELDS:
+        if isinstance(value, bool):
+            return value
+        return str(value).strip().lower() in ("1", "true", "yes", "on")
+    if key in _INTEGER_FIELDS:
+        if isinstance(value, bool):
+            return int(value)
+        if isinstance(value, int):
+            return value
+        text = str(value).strip()
+        if not text:
+            return None          # drop it rather than write an unparseable ""
+        try:
+            return int(text)
+        except ValueError:
+            raise MutateError(f"{key} must be a whole number, not {text!r}")
+    return value
+
+
 def _clean(fields: Any) -> Dict[str, Any]:
     if not isinstance(fields, dict):
         return {}
-    return {k: v for k, v in fields.items() if k in EDITABLE}
+    cleaned = {}
+    for key, value in fields.items():
+        if key not in EDITABLE:
+            continue
+        coerced = _coerce(key, value)
+        if coerced is None and key in _INTEGER_FIELDS:
+            continue
+        cleaned[key] = coerced
+    return cleaned
 
 
 def apply_ops(payload: Dict[str, Any],
@@ -141,7 +177,11 @@ def apply_ops(payload: Dict[str, Any],
                     if kind == "hide":
                         grave = {"name": entry.get("name"), "source": ident[0],
                                  "id": ident[1],
-                                 "at": time.strftime("%Y-%m-%dT%H:%M:%S%z")}
+                                 "at": time.strftime("%Y-%m-%dT%H:%M:%S%z"),
+                                 # Keep the whole entry so un-hiding can put it
+                                 # back directly, rather than clearing the
+                                 # tombstone and waiting for a scan to notice.
+                                 "entry": copy.deepcopy(entry)}
                         if entry.get("image-path"):
                             grave["image-path"] = entry["image-path"]
                         removed = [t for t in removed
@@ -157,12 +197,19 @@ def apply_ops(payload: Dict[str, Any],
 
             elif kind == "restore":
                 key = str(op.get("selector", ""))
-                before = len(removed)
-                removed = [t for t in removed
-                           if f"{t.get('source')}:{t.get('id')}" != key]
-                if len(removed) == before:
+                grave = next((t for t in removed
+                              if f"{t.get('source')}:{t.get('id')}" == key), None)
+                if grave is None:
                     raise MutateError(f"{key} is not hidden")
-                results.append({"op": kind, "ok": True, "name": key})
+                removed = [t for t in removed if t is not grave]
+                restored = grave.get("entry")
+                if isinstance(restored, dict) and restored.get("name"):
+                    if not any(identity(a) == identity(restored) for a in apps):
+                        apps.append(copy.deepcopy(restored))
+                    if key not in managed and identity(restored):
+                        managed.append(key)
+                results.append({"op": kind, "ok": True,
+                                "name": grave.get("name") or key})
 
             else:
                 raise MutateError(f"Unknown operation {kind!r}")
