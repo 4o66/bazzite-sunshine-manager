@@ -309,3 +309,52 @@ class TestUnhideBringsItBack(unittest.TestCase):
         hidden["apps"].append(tag({"name": "Portal 2", "cmd": "x"}, "steam", "620"))
         out, _ = apply_ops(hidden, [{"op": "restore", "selector": "steam:620"}])
         self.assertEqual([a["name"] for a in out["apps"]].count("Portal 2"), 1)
+
+
+class TestAdoptCoercesToo(unittest.TestCase):
+    """Adopt was the one route into apps.json that skipped validation.
+
+    Safe only while its entries came straight from the importer. Editing a
+    pending entry sends form strings down this path, and an exit-timeout of ""
+    is what made Sunshine's configuration API answer 400.
+    """
+
+    def _entry(self, **over):
+        base = {"name": "TF2", "cmd": "steam -applaunch 440"}
+        base.update(over)
+        return tag(base, "steam", "440")
+
+    def test_a_blank_integer_is_dropped_rather_than_written(self):
+        out, res = apply_ops(payload(), [{"op": "adopt",
+                                          "entry": self._entry(**{"exit-timeout": ""})}])
+        self.assertTrue(res[0]["ok"])
+        added = [a for a in out["apps"] if a["name"] == "TF2"][0]
+        self.assertNotIn("exit-timeout", added)
+
+    def test_a_numeric_string_becomes_a_number(self):
+        out, _ = apply_ops(payload(), [{"op": "adopt",
+                                        "entry": self._entry(**{"exit-timeout": "7"})}])
+        added = [a for a in out["apps"] if a["name"] == "TF2"][0]
+        self.assertEqual(added["exit-timeout"], 7)
+
+    def test_a_string_boolean_becomes_a_boolean(self):
+        out, _ = apply_ops(payload(), [{"op": "adopt",
+                                        "entry": self._entry(elevated="on")}])
+        added = [a for a in out["apps"] if a["name"] == "TF2"][0]
+        self.assertIs(added["elevated"], True)
+
+    def test_nonsense_is_refused_rather_than_stored(self):
+        _, res = apply_ops(payload(), [{"op": "adopt",
+                                        "entry": self._entry(**{"exit-timeout": "soon"})}])
+        self.assertFalse(res[0]["ok"])
+
+    def test_the_marker_survives_coercion(self):
+        out, _ = apply_ops(payload(), [{"op": "adopt",
+                                        "entry": self._entry(**{"exit-timeout": "5"})}])
+        added = [a for a in out["apps"] if a["name"] == "TF2"][0]
+        self.assertIn(MARKER, added)
+
+    def test_the_op_payload_is_not_mutated(self):
+        entry = self._entry(**{"exit-timeout": "5"})
+        apply_ops(payload(), [{"op": "adopt", "entry": entry}])
+        self.assertEqual(entry["exit-timeout"], "5")

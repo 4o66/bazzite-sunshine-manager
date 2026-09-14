@@ -112,6 +112,18 @@ def apply_ops(payload: Dict[str, Any],
                 entry = op.get("entry")
                 if not isinstance(entry, dict) or not entry.get("name"):
                     raise MutateError("Nothing to adopt")
+                # Coerce here too. This was safe only while adopt entries came
+                # straight from the importer; once a front end can edit one
+                # before it is applied, form strings reach this path and an
+                # exit-timeout of "" makes Sunshine's whole API answer 400.
+                entry = dict(entry)
+                for field, value in list(entry.items()):
+                    if field in _INTEGER_FIELDS or field in _BOOLEAN_FIELDS:
+                        coerced = _coerce(field, value)
+                        if coerced is None:
+                            del entry[field]
+                        else:
+                            entry[field] = coerced
                 ident = identity(entry)
                 if ident is None:
                     raise MutateError(f"{entry.get('name')!r} has no ownership marker")
