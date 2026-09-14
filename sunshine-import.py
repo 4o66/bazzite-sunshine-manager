@@ -2,9 +2,13 @@
 """
 Bazzite Sunshine Manager
 
-Author: wadiebs
+Original author: wadiebs (https://github.com/wadiebs/bazzite-sunshine-manager)
 Date: January 2026
-Version: 2.0
+
+This is 4o66's fork. Its own version is VERSION below; the upstream release it
+is built on is UPSTREAM. Upstream publishes no tags or releases, so the only
+exact statement about what this is based on is the commit, which is why UPSTREAM
+names one alongside the version upstream declares for itself.
 
 Description:
 Automated importer and manager for Sunshine streaming app configurations.
@@ -30,7 +34,12 @@ import pathlib
 from pathlib import Path
 from typing import Dict, Any
 
-VERSION = "2.0"
+VERSION = "0.1.0"
+
+# The upstream commit this fork is built on. Kept beside VERSION, and reported
+# in every plan document, so a bug report says which upstream it came from
+# without anyone having to work it out from a diff.
+UPSTREAM = "wadiebs/bazzite-sunshine-manager 2.0 (4bedee5, 2026-04-19)"
 
 # Safe to import local modules now
 from common.utils import log, read_json, write_json  # noqa: E402
@@ -279,7 +288,8 @@ def dump_state(conf_dir: str, as_json: bool) -> int:
 
     doc = {
         "schema": SCHEMA_VERSION,
-        "generator": {"name": "bazzite-sunshine-manager", "version": VERSION},
+        "generator": {"name": "bazzite-sunshine-manager", "version": VERSION,
+                      "fork": "4o66/bazzite-sunshine-manager", "upstream": UPSTREAM},
         "config_dir": conf_dir,
         "apps_json": apps_json,
         "apps": entries,
@@ -520,7 +530,9 @@ def main(argv: list[str]) -> int:
         # Logs go to stderr, so stdout stays a clean JSON document.
         doc = plan_document(plan, config_dir=conf_dir, apps_json=apps_json,
                             sources=sources, dry_run=dry_run,
-                            generator_version=VERSION)
+                            generator_version=VERSION,
+                            fork="4o66/bazzite-sunshine-manager",
+                            upstream=UPSTREAM)
         json.dump(doc, sys.stdout, indent=2)
         sys.stdout.write("\n")
 

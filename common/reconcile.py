@@ -284,14 +284,21 @@ SCHEMA_VERSION = 1
 
 def plan_document(plan: Dict[str, Any], *, config_dir: str, apps_json: str,
                   sources: List[Dict[str, Any]], dry_run: bool,
-                  generator_version: str) -> Dict[str, Any]:
+                  generator_version: str, fork: str = "",
+                  upstream: str = "") -> Dict[str, Any]:
     """Serialize a reconcile *plan* as the versioned document other tools consume.
 
     Consumers should reject a schema version they do not know rather than guess.
     """
     return {
         "schema": SCHEMA_VERSION,
-        "generator": {"name": "bazzite-sunshine-manager", "version": generator_version},
+        # Which fork, and which upstream it was built on. A plan document is
+        # what gets pasted into a bug report, and "bazzite-sunshine-manager 2.0"
+        # on its own does not say whose.
+        "generator": {"name": "bazzite-sunshine-manager",
+                      "version": generator_version,
+                      **({"fork": fork} if fork else {}),
+                      **({"upstream": upstream} if upstream else {})},
         "generated_at": time.strftime("%Y-%m-%dT%H:%M:%S%z"),
         "dry_run": dry_run,
         "config_dir": config_dir,

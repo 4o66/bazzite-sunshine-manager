@@ -303,3 +303,35 @@ class TestPlanCarriesPayload(unittest.TestCase):
         out, plan = reconcile([], [g])
         plan["added"][0]["entry"]["name"] = "mutated"
         self.assertEqual(out[0]["name"], "Portal 2")
+
+
+class GeneratorIdentityTest(unittest.TestCase):
+    """A plan document says which fork produced it, and on what.
+
+    Upstream publishes no tags, so "bazzite-sunshine-manager 2.0" identifies
+    neither whose build it is nor which upstream it came from -- which is all a
+    bug report has to go on.
+    """
+
+    def _doc(self, **extra):
+        return plan_document({"added": []}, config_dir="/c", apps_json="/c/a.json",
+                             sources=[], dry_run=True, generator_version="0.1.0",
+                             **extra)
+
+    def test_the_fork_is_named(self):
+        doc = self._doc(fork="4o66/bazzite-sunshine-manager")
+        self.assertEqual(doc["generator"]["fork"], "4o66/bazzite-sunshine-manager")
+
+    def test_the_upstream_it_was_built_on_is_named(self):
+        doc = self._doc(upstream="wadiebs/bazzite-sunshine-manager 2.0 (4bedee5)")
+        self.assertIn("4bedee5", doc["generator"]["upstream"])
+
+    def test_a_plain_build_says_neither_rather_than_saying_nothing_useful(self):
+        generator = self._doc()["generator"]
+        self.assertNotIn("fork", generator)
+        self.assertNotIn("upstream", generator)
+        self.assertEqual(generator["version"], "0.1.0")
+
+    def test_the_schema_is_unchanged_by_saying_more(self):
+        """Consumers reject an unknown schema, so this must not look like one."""
+        self.assertEqual(self._doc(fork="x", upstream="y")["schema"], SCHEMA_VERSION)
