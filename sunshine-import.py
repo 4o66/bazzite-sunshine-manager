@@ -56,7 +56,7 @@ from common.reconcile import (MARKER, SCHEMA_VERSION, backup, log_plan,  # noqa:
 from common.system_apps import (find_system_apps_json, load_system_apps,  # noqa: E402
                                 restore_missing)
 from common.mutate import apply_ops  # noqa: E402
-from common.backups import adopt_legacy, list_backups  # noqa: E402
+from common.backups import adopt_legacy, compare, list_backups  # noqa: E402
 from common.artwork_sources import (ArtworkError, choose_artwork,  # noqa: E402
                                     find_candidates, find_steam_root,
                                     load_sgdb_key, save_sgdb_key)
@@ -223,6 +223,30 @@ def dump_backups(conf_dir: str, as_json: bool) -> int:
     return 0
 
 
+def backup_diff(conf_dir: str, as_json: bool) -> int:
+    """What restoring one kept copy would change, without changing anything."""
+    apps_json = os.path.join(conf_dir, "apps.json")
+    current = read_json(apps_json, {})
+    if not isinstance(current, dict):
+        current = {"apps": current if isinstance(current, list) else []}
+    try:
+        doc = compare(current, os.getenv("BSM_BACKUP_DIFF", ""))
+    except ValueError as e:
+        if as_json:
+            json.dump({"ok": False, "message": str(e)}, sys.stdout)
+            sys.stdout.write("\n")
+        log(str(e))
+        return 1
+    doc["ok"] = True
+    if as_json:
+        json.dump(doc, sys.stdout, indent=2)
+        sys.stdout.write("\n")
+    else:
+        log(f"{len(doc['returning'])} would return, {len(doc['going'])} would go, "
+            f"{len(doc['changing'])} would change")
+    return 0
+
+
 def art_search(conf_dir: str, as_json: bool) -> int:
     """Offer every piece of cover art available for one app.
 
@@ -380,6 +404,8 @@ def main(argv: list[str]) -> int:
         return check_auth(conf_dir, as_json)
     if getenv_flag("BSM_SAVE_AUTH", False):
         return save_auth(conf_dir, as_json)
+    if os.getenv("BSM_BACKUP_DIFF", ""):
+        return backup_diff(conf_dir, as_json)
     if getenv_flag("BSM_BACKUPS", False):
         return dump_backups(conf_dir, as_json)
     if getenv_flag("BSM_ART_SEARCH", False):

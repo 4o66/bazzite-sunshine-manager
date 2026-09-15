@@ -171,3 +171,68 @@ def adopt_legacy(conf_dir: str, keep: int = KEEP) -> int:
     if moved:
         prune(keep)
     return moved
+
+
+def _key(entry: Dict[str, Any]) -> str:
+    """How an app is matched across two versions of the file.
+
+    By ownership marker when there is one, because that survives a rename;
+    by name otherwise, because that is all an entry Sunshine or a person
+    created has.
+    """
+    from .reconcile import identity
+    ident = identity(entry) if isinstance(entry, dict) else None
+    if ident:
+        return f"{ident[0]}:{ident[1]}"
+    return "name:" + str(entry.get("name", "")) if isinstance(entry, dict) else ""
+
+
+def _fields(entry: Dict[str, Any]) -> Dict[str, Any]:
+    from .reconcile import MARKER
+    return {k: v for k, v in entry.items() if k != MARKER}
+
+
+def compare(current: Dict[str, Any], name: str) -> Dict[str, Any]:
+    """What restoring copy *name* would do to *current*.
+
+    Worked out here rather than by a front end: deciding whether two entries
+    are the same app is the reconciler's rule, and there should be one of it.
+    """
+    copy_payload = load(name)
+
+    def index(payload):
+        apps = payload.get("apps")
+        apps = apps if isinstance(apps, list) else []
+        return {_key(a): a for a in apps if isinstance(a, dict)}
+
+    now, then = index(current), index(copy_payload)
+
+    returning = [then[k] for k in then if k not in now]
+    going = [now[k] for k in now if k not in then]
+    changing = []
+    for k in then:
+        if k in now and _fields(then[k]) != _fields(now[k]):
+            fields = sorted(set(_fields(then[k])) | set(_fields(now[k])))
+            changing.append({
+                "name": then[k].get("name"),
+                "fields": [f for f in fields
+                           if _fields(now[k]).get(f) != _fields(then[k]).get(f)],
+            })
+
+    def meta_list(payload, key):
+        meta = payload.get("meta")
+        value = meta.get(key) if isinstance(meta, dict) else None
+        return value if isinstance(value, list) else []
+
+    return {
+        "backup": name,
+        "returning": [{"name": a.get("name")} for a in returning],
+        "going": [{"name": a.get("name")} for a in going],
+        "changing": changing,
+        # The part no per-entry view can show, and the reason this is a
+        # whole-file operation.
+        "hidden_now": len(meta_list(current, "removed")),
+        "hidden_then": len(meta_list(copy_payload, "removed")),
+        "nothing_to_do": not (returning or going or changing)
+                         and meta_list(current, "removed") == meta_list(copy_payload, "removed"),
+    }
