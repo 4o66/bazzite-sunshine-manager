@@ -1,5 +1,18 @@
 # Bazzite Sunshine Manager
 
+> ## Development moved
+>
+> This fork has been folded into
+> [**sunshine-apps-ui**](https://github.com/4o66/sunshine-apps-ui), which is now
+> one program rather than two talking over a command-line contract. Everything
+> here lives there, under `src/sunshine_apps_ui/core`, and that is where changes
+> go.
+>
+> This repository stays for its history and for the two pull requests still open
+> upstream. It is not developed here any more.
+>
+> ---
+>
 > **This is 4o66's fork**, version **`2.0+4o66.0.1.0`** -- upstream's 2.0 with
 > this fork's 0.1.0 on top -- built on upstream
 > [wadiebs/bazzite-sunshine-manager](https://github.com/wadiebs/bazzite-sunshine-manager)
