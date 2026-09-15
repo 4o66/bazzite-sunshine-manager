@@ -56,6 +56,7 @@ from common.reconcile import (MARKER, SCHEMA_VERSION, backup, log_plan,  # noqa:
 from common.system_apps import (find_system_apps_json, load_system_apps,  # noqa: E402
                                 restore_missing)
 from common.mutate import apply_ops  # noqa: E402
+from common.backups import adopt_legacy, list_backups  # noqa: E402
 from common.artwork_sources import (ArtworkError, choose_artwork,  # noqa: E402
                                     find_candidates, find_steam_root,
                                     load_sgdb_key, save_sgdb_key)
@@ -196,6 +197,29 @@ def browse(conf_dir: str, as_json: bool) -> int:
         sys.stdout.write("\n")
     else:
         log(f"{doc.get('path')}: {len(doc.get('entries', []))} entries")
+    return 0
+
+
+def dump_backups(conf_dir: str, as_json: bool) -> int:
+    """List the kept copies of apps.json, newest first.
+
+    Sweeps up any left in Sunshine's directory by the old layout first, so a
+    machine that has been upgraded shows one list rather than two.
+    """
+    moved = adopt_legacy(conf_dir)
+    if moved:
+        log(f"Moved {moved} older copy(s) out of {conf_dir}")
+    copies = list_backups()
+    doc = {"ok": True, "backups": copies}
+    if as_json:
+        json.dump(doc, sys.stdout, indent=2)
+        sys.stdout.write("\n")
+    else:
+        for copy in copies:
+            state = "" if copy["readable"] else "  (unreadable)"
+            log(f"{copy['name']}  {copy['apps']:>3} apps{state}")
+        if not copies:
+            log("No copies kept yet.")
     return 0
 
 
@@ -356,6 +380,8 @@ def main(argv: list[str]) -> int:
         return check_auth(conf_dir, as_json)
     if getenv_flag("BSM_SAVE_AUTH", False):
         return save_auth(conf_dir, as_json)
+    if getenv_flag("BSM_BACKUPS", False):
+        return dump_backups(conf_dir, as_json)
     if getenv_flag("BSM_ART_SEARCH", False):
         return art_search(conf_dir, as_json)
     if os.getenv("BSM_ART_CHOOSE", ""):

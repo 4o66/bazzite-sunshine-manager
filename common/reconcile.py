@@ -313,17 +313,12 @@ def plan_document(plan: Dict[str, Any], *, config_dir: str, apps_json: str,
 
 
 def backup(path: str, keep: int = 10) -> str:
-    """Timestamped backup, keeping the most recent *keep*. Returns its path."""
-    if not os.path.exists(path):
-        return ""
-    dst = f"{path}.bak-{time.strftime('%Y%m%d-%H%M%S')}"
-    shutil.copy2(path, dst)
-    prefix = os.path.basename(path) + ".bak-"
-    directory = os.path.dirname(path) or "."
-    old = sorted(f for f in os.listdir(directory) if f.startswith(prefix))
-    for stale in old[:-keep]:
-        try:
-            os.remove(os.path.join(directory, stale))
-        except OSError:
-            pass
-    return dst
+    """Copy apps.json aside before writing it. Returns the copy's path.
+
+    Kept as a thin wrapper because every caller writes apps.json and every one
+    of them should take a copy first; where those copies live is backups' to
+    decide, and it stopped being "next to the original" once there was a way to
+    restore one.
+    """
+    from .backups import capture
+    return capture(path, keep)

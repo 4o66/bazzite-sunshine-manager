@@ -15,6 +15,7 @@ import copy
 import time
 from typing import Any, Dict, List, Tuple
 
+from .backups import load as load_backup
 from .reconcile import MARKER, identity, selector
 from .utils import log
 
@@ -140,6 +141,32 @@ def apply_ops(payload: Dict[str, Any],
                 removed = [t for t in removed
                            if f"{t.get('source')}:{t.get('id')}" != key]
                 results.append({"op": kind, "ok": True, "name": entry["name"]})
+
+            elif kind == "rollback":
+                # Put a kept copy back, whole. Not expressible as per-entry
+                # edits: what makes a copy worth keeping is that it also holds
+                # the managed list and the tombstones, and those are the part
+                # you cannot reconstruct by looking at the apps.
+                #
+                # Distinct from "restore", which un-hides one entry. This
+                # replaces the file.
+                name = str(op.get("backup", ""))
+                try:
+                    restored = load_backup(name)
+                except ValueError as e:
+                    # MutateError is a ValueError, but not the other way round,
+                    # so this would otherwise escape the per-op handler and take
+                    # the whole batch down with it.
+                    raise MutateError(str(e)) from e
+                apps = restored.get("apps")
+                apps = apps if isinstance(apps, list) else []
+                payload = copy.deepcopy(restored)
+                payload["apps"] = apps
+                meta = payload.setdefault("meta", {})
+                managed = meta.get("managed") if isinstance(meta.get("managed"), list) else []
+                removed = meta.get("removed") if isinstance(meta.get("removed"), list) else []
+                results.append({"op": kind, "ok": True, "name": name,
+                                "apps": len(apps)})
 
             elif kind == "suppress":
                 # Refusing something a scan offered, before it ever exists in
