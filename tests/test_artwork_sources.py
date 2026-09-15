@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
 """The artwork picker's sources.
 
 Nothing here touches the network: every source is exercised by substituting the

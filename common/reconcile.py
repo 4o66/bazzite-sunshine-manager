@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
 """Three-way reconcile of generated apps into an existing apps.json.
 
 The importer used to rewrite apps.json from scratch on every run, which deleted

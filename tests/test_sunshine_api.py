@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
 """Tests for the hot-reload path. No network: the HTTP layer is stubbed."""
 import json
 import os

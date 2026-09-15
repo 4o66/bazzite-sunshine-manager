@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
 """The generated launcher entries.
 
 These are synthesised rather than discovered, so the thing worth testing is not

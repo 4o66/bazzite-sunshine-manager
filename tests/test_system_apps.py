@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
 """Tests for seeding and restoring Sunshine's shipped default apps."""
 import json
 import os

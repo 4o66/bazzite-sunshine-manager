@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
 import os, re, urllib.request, urllib.parse, tempfile, shutil, subprocess
 from io import BytesIO
 from PIL import Image  # pillow is required

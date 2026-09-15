@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
 """Finding candidate cover art for an app, so a person can choose between them.
 
 The importer picks the first artwork that works and stops. Someone choosing

@@ -30,6 +30,13 @@
 > - Credentials and the SteamGridDB key read on stdin and stored mode 600,
 >   instead of `--sgdb-key` on the command line where `ps` can read it.
 >
+> **Licence.** This fork is **GPL-3.0-or-later**; upstream is MIT. The MIT
+> licence permits a derivative to be distributed under other terms as long as
+> its notice is retained, so upstream's notice is preserved verbatim in
+> `LICENSE.upstream-MIT` and upstream's code remains available from upstream
+> under MIT. `NOTICE` explains the arrangement, including the consequence:
+> patches from this fork can no longer be offered to an MIT upstream.
+>
 > Upstream's own README follows.
 
 A lightweight tool to import Steam, Heroic (Epic/GOG/Amazon), and Lutris games into [Sunshine](https://github.com/LizardByte/Sunshine).  

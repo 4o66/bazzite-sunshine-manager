@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
 """Applying manual changes to apps.json.
 
 The front end queues operations and sends them here rather than writing

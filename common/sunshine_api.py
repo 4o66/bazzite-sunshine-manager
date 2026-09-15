@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
 """Talking to Sunshine's own web API so a written apps.json takes effect.
 
 Sunshine re-reads apps.json at startup and in exactly two other places:

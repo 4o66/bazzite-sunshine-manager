@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
 import os, re, glob, json, pathlib
 from typing import List, Dict, Any
 from common.utils import log, yn, read_json

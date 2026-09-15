@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
 # importers/heroic.py
 # Heroic (Epic/GOG/Amazon/Sideload) importer
 # Ports the logic from the monolithic sunshine-import.py into the split architecture.

@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+# SPDX-License-Identifier: GPL-3.0-or-later
 # Capture a SteamGridDB API key for the artwork picker.
 #
 # Run this from your own terminal. Get a key from

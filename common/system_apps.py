@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
 """Sunshine's own default apps: locating them, seeding from them, restoring them.
 
 Sunshine ships an apps.json containing the entries a fresh install starts with

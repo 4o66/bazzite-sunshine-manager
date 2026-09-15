@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
 """
 Concurrent image downloader for Sunshine app covers.
 Significantly speeds up image fetching by downloading in parallel.

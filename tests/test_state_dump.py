@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
 """What --state reports about apps.json.
 
 A front end draws an edit form from this. Anything it leaves out renders as

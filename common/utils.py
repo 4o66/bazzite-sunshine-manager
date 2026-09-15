@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
 import os, sys, re, json, tempfile, shutil, time
 
 is_tty = sys.stderr.isatty() or (os.getenv("FORCE_COLOR","0")=="1")

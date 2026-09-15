@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+# SPDX-License-Identifier: GPL-3.0-or-later
 # sunshine-import — wrapper to run sunshine-import.py with flags
 #
 # Usage:

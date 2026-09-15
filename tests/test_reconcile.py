@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
 """Tests for the apps.json reconcile logic. Standard library only:
 
     python3 -m unittest discover -s tests -v

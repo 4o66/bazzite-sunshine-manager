@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
 """Tests for deletion tombstones and opt-in removal of uninstalled entries."""
 import os
 import sys

@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
 """Tests for manual changes applied to apps.json."""
 import os
 import sys
